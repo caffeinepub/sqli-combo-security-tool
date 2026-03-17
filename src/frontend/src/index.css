@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/assets/fonts/JetBrainsMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.375rem;
+    --background: 0.08 0 0;
+    --foreground: 0.97 0 0;
+    --card: 0.13 0.012 248;
+    --card-foreground: 0.97 0 0;
+    --popover: 0.13 0.012 248;
+    --popover-foreground: 0.97 0 0;
+    --primary: 0.78 0.14 193;
+    --primary-foreground: 0.08 0 0;
+    --secondary: 0.18 0.015 248;
+    --secondary-foreground: 0.97 0 0;
+    --muted: 0.18 0.015 248;
+    --muted-foreground: 0.55 0 0;
+    --accent: 0.78 0.14 193;
+    --accent-foreground: 0.08 0 0;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.97 0 0;
+    --border: 0.22 0.01 248;
+    --input: 0.22 0.01 248;
+    --ring: 0.78 0.14 193;
+    --chart-1: 0.78 0.14 193;
+    --chart-2: 0.577 0.245 27.325;
+    --chart-3: 0.7 0.18 50;
+    --chart-4: 0.72 0.18 143;
+    --chart-5: 0.6 0.1 248;
+    --sidebar: 0.11 0.012 248;
+    --sidebar-foreground: 0.97 0 0;
+    --sidebar-primary: 0.78 0.14 193;
+    --sidebar-primary-foreground: 0.08 0 0;
+    --sidebar-accent: 0.18 0.015 248;
+    --sidebar-accent-foreground: 0.97 0 0;
+    --sidebar-border: 0.22 0.01 248;
+    --sidebar-ring: 0.78 0.14 193;
+    --cyan: 0.78 0.14 193;
+    --red: 0.577 0.245 27.325;
+    --orange: 0.7 0.18 50;
+    --green: 0.72 0.18 143;
+    --yellow: 0.82 0.19 95;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "General Sans", system-ui, sans-serif;
+  }
+}
