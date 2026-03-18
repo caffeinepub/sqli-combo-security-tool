@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import AttackAlertPopup from "./components/AttackAlertPopup";
 import Sidebar from "./components/Sidebar";
 import {
   INITIAL_ACTIVITY,
@@ -16,6 +17,7 @@ import LoginPage from "./pages/LoginPage";
 import PreventPage from "./pages/PreventPage";
 import ReportsPage from "./pages/ReportsPage";
 import ScanPage from "./pages/ScanPage";
+import SecurityLogoPage from "./pages/SecurityLogoPage";
 import type {
   ActivityEntry,
   Alert,
@@ -29,6 +31,7 @@ import type {
 export default function App() {
   const [page, setPage] = useState<Page>("login");
   const [user, setUser] = useState<User | null>(null);
+  const [showSecurityLogo, setShowSecurityLogo] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>(INITIAL_ALERTS);
   const [tasks, setTasks] = useState<PreventionTask[]>(
@@ -38,6 +41,11 @@ export default function App() {
   const [threatTrend, setThreatTrend] = useState<ThreatPoint[]>(
     generateInitialThreatTrend,
   );
+  const [attackPopup, setAttackPopup] = useState<{
+    name: string;
+    severity: string;
+    signal: string;
+  } | null>(null);
 
   const addActivity = useCallback((action: string, actor: string) => {
     setActivity((prev) => [
@@ -56,14 +64,16 @@ export default function App() {
       if (email === "admin@combodefense.local" && password === "admin123") {
         const u: User = { name: "Security Admin", email, role: "admin" };
         setUser(u);
-        setScanning(true);
+        setShowSecurityLogo(true);
+        setScanning(false);
         addActivity("User logged in", email);
         return true;
       }
       if (email === "analyst@combodefense.local" && password === "analyst123") {
         const u: User = { name: "Security Analyst", email, role: "analyst" };
         setUser(u);
-        setScanning(true);
+        setShowSecurityLogo(true);
+        setScanning(false);
         addActivity("User logged in", email);
         return true;
       }
@@ -71,6 +81,11 @@ export default function App() {
     },
     [addActivity],
   );
+
+  const handleSecurityLogoComplete = useCallback(() => {
+    setShowSecurityLogo(false);
+    setScanning(true);
+  }, []);
 
   const handleScanComplete = useCallback(() => {
     setScanning(false);
@@ -112,6 +127,12 @@ export default function App() {
       toast.success(
         `${scenarioName}: Safe replay completed. Detection and prevention workflows were updated.`,
       );
+      // Show attack popup
+      setAttackPopup({
+        name: scenarioName,
+        severity: newAlert.severity,
+        signal: newAlert.signal,
+      });
     },
     [addActivity, user],
   );
@@ -167,6 +188,15 @@ export default function App() {
   const openAlerts = alerts.filter((a) => a.status === "open").length;
   const blockedAttempts = alerts.filter((a) => a.status === "resolved").length;
   const simulatedAttacks = alerts.length;
+
+  if (showSecurityLogo) {
+    return (
+      <>
+        <SecurityLogoPage onComplete={handleSecurityLogoComplete} />
+        <Toaster theme="dark" />
+      </>
+    );
+  }
 
   if (scanning) {
     return (
@@ -241,6 +271,10 @@ export default function App() {
       />
       <main className="flex-1 overflow-y-auto">{renderPage()}</main>
       <Toaster theme="dark" />
+      <AttackAlertPopup
+        attack={attackPopup}
+        onDismiss={() => setAttackPopup(null)}
+      />
     </div>
   );
 }

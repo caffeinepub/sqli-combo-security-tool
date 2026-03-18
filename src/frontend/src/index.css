@@ -59,3 +59,221 @@
     font-family: "General Sans", system-ui, sans-serif;
   }
 }
+
+/* ==============================
+   Attack Alert Popup Animations
+   ============================== */
+
+@keyframes pulse-border {
+  0%,
+  100% {
+    box-shadow: 0 0 40px rgba(220, 30, 30, 0.4), 0 0 80px rgba(220, 30, 30, 0.2),
+      inset 0 0 30px rgba(220, 30, 30, 0.05);
+    border-color: rgba(220, 30, 30, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 60px rgba(220, 30, 30, 0.7), 0 0 120px
+      rgba(220, 30, 30, 0.35), inset 0 0 40px rgba(220, 30, 30, 0.1);
+    border-color: rgba(255, 50, 50, 1);
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes icon-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 30, 30, 0.5);
+    background: radial-gradient(
+      circle,
+      rgba(220, 30, 30, 0.25) 0%,
+      rgba(220, 30, 30, 0.05) 70%
+    );
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 30, 30, 0);
+    background: radial-gradient(
+      circle,
+      rgba(220, 30, 30, 0.4) 0%,
+      rgba(220, 30, 30, 0.1) 70%
+    );
+  }
+}
+
+@keyframes glitch-text {
+  0% {
+    transform: translate(0);
+    clip-path: none;
+  }
+  10% {
+    transform: translate(-3px, 1px);
+    clip-path: inset(20% 0 50% 0);
+  }
+  20% {
+    transform: translate(3px, -1px);
+    clip-path: inset(60% 0 10% 0);
+  }
+  30% {
+    transform: translate(0);
+    clip-path: none;
+  }
+  40% {
+    transform: translate(2px, 1px);
+    clip-path: inset(40% 0 30% 0);
+  }
+  50% {
+    transform: translate(-2px, -1px);
+    clip-path: inset(10% 0 70% 0);
+  }
+  60% {
+    transform: translate(0);
+    clip-path: none;
+  }
+  100% {
+    transform: translate(0);
+    clip-path: none;
+  }
+}
+
+@keyframes slide-bar {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 200% 0%;
+  }
+}
+
+.attack-popup-card {
+  background: linear-gradient(135deg, #0a0a0f 0%, #12050a 100%);
+  border: 1.5px solid rgba(220, 30, 30, 0.7);
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+.attack-bar-slide {
+  height: 4px;
+  background: linear-gradient(90deg, #dc1e1e 0%, #ff6b35 50%, #dc1e1e 100%);
+  background-size: 200% 100%;
+  animation: slide-bar 2s linear infinite;
+}
+
+.attack-icon-pulse {
+  border: 2px solid rgba(220, 30, 30, 0.6);
+  animation: icon-pulse 1s ease-in-out infinite;
+}
+
+.attack-ring-1 {
+  border: 2px solid rgba(220, 30, 30, 0.4);
+  animation: ring-pulse 1.5s ease-out infinite;
+}
+
+.attack-ring-2 {
+  border: 2px solid rgba(220, 30, 30, 0.2);
+  animation: ring-pulse 1.5s ease-out 0.5s infinite;
+}
+
+.attack-glitch {
+  animation: glitch-text 0.3s steps(1) forwards;
+}
+
+.attack-dismiss-btn {
+  background: linear-gradient(
+    135deg,
+    rgba(220, 30, 30, 0.2) 0%,
+    rgba(220, 30, 30, 0.1) 100%
+  );
+  border: 1px solid rgba(220, 30, 30, 0.5);
+  color: #ef4444;
+  box-shadow: 0 0 20px rgba(220, 30, 30, 0.15);
+}
+
+.attack-dismiss-btn:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(220, 30, 30, 0.35) 0%,
+    rgba(220, 30, 30, 0.2) 100%
+  );
+  border-color: rgba(220, 30, 30, 0.8);
+  box-shadow: 0 0 30px rgba(220, 30, 30, 0.3);
+}
+
+/* ── Real-time Scanner Animations ─────────────────────────── */
+@keyframes sweep-line {
+  0% {
+    top: -4px;
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.scan-sweep-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #00d4d4 40%,
+    #00ffaa 60%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px 3px rgba(0, 212, 212, 0.6), 0 0 24px 6px
+    rgba(0, 212, 212, 0.2);
+  animation: sweep-line 2.2s linear infinite;
+  z-index: 10;
+}
+
+@keyframes blip-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+  60% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+}
+
+.blip-pulse {
+  animation: blip-appear 2.8s ease-in-out infinite;
+  box-shadow: 0 0 6px 2px rgba(52, 211, 153, 0.7);
+}
+
+/* Hide scrollbar for scanner log */
+.scanner-log::-webkit-scrollbar {
+  width: 3px;
+}
+.scanner-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scanner-log::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0.05 248);
+  border-radius: 2px;
+}
