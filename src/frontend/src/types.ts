@@ -54,3 +54,10 @@ export interface AttackScenario {
   steps: string[];
   prevention: string;
 }
+
+export interface ScannerEvent {
+  id: number;
+  timestamp: string;
+  message: string;
+  status: "FLAGGED";
+}

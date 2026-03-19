@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { ThreatPoint } from "../types";
+import type { ScannerEvent, ThreatPoint } from "../types";
 
 interface DashboardPageProps {
   threatLevel: number;
@@ -18,6 +18,7 @@ interface DashboardPageProps {
   simulatedAttacks: number;
   threatTrend: ThreatPoint[];
   preventionCoverage: number;
+  scannerEvents?: ScannerEvent[];
 }
 
 function StatCard({
@@ -53,6 +54,7 @@ interface ScanEntry {
   timestamp: string;
   message: string;
   status: ScanStatus;
+  isRealEvent?: boolean;
 }
 
 const SCAN_POOL: { message: string; status: ScanStatus }[] = [
@@ -116,12 +118,15 @@ const MSG_COLORS: Record<ScanStatus, string> = {
 
 const MAX_ENTRIES = 12;
 
-function LiveScanner() {
+function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
   const [entries, setEntries] = useState<ScanEntry[]>([]);
   const [progress, setProgress] = useState(0);
   const logRef = useRef<HTMLDivElement>(null);
   const poolIndexRef = useRef(0);
   const secondsRef = useRef(0);
+  const prevExternalLengthRef = useRef(0);
+  // Track which ids are currently flashing
+  const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
 
   // Add new scan entry every 1.5s
   useEffect(() => {
@@ -142,7 +147,6 @@ function LiveScanner() {
           next.length > MAX_ENTRIES
             ? next.slice(next.length - MAX_ENTRIES)
             : next;
-        // Auto-scroll after state update
         requestAnimationFrame(() => {
           if (logRef.current) {
             logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -153,6 +157,50 @@ function LiveScanner() {
     }, 1500);
     return () => clearInterval(interval);
   }, []);
+
+  // Watch externalEvents for new real attack events
+  useEffect(() => {
+    if (!externalEvents || externalEvents.length === 0) return;
+    if (externalEvents.length <= prevExternalLengthRef.current) return;
+
+    // Inject all newly added events
+    const newEvents = externalEvents.slice(prevExternalLengthRef.current);
+    prevExternalLengthRef.current = externalEvents.length;
+
+    const injected: ScanEntry[] = newEvents.map((ev) => ({
+      id: ev.id,
+      timestamp: ev.timestamp,
+      message: ev.message,
+      status: "FLAGGED" as ScanStatus,
+      isRealEvent: true,
+    }));
+
+    setEntries((prev) => {
+      const combined = [...prev, ...injected];
+      const trimmed =
+        combined.length > MAX_ENTRIES
+          ? combined.slice(combined.length - MAX_ENTRIES)
+          : combined;
+      requestAnimationFrame(() => {
+        if (logRef.current) {
+          logRef.current.scrollTop = logRef.current.scrollHeight;
+        }
+      });
+      return trimmed;
+    });
+
+    // Mark new event ids as flashing
+    const newIds = new Set(injected.map((e) => e.id));
+    setFlashIds((prev) => new Set([...prev, ...newIds]));
+    // Remove flash after 1.2s
+    setTimeout(() => {
+      setFlashIds((prev) => {
+        const next = new Set(prev);
+        for (const id of newIds) next.delete(id);
+        return next;
+      });
+    }, 1200);
+  }, [externalEvents]);
 
   // Progress bar looping 0→100 every 10s
   useEffect(() => {
@@ -272,13 +320,27 @@ function LiveScanner() {
             {entries.map((entry) => (
               <div
                 key={entry.id}
-                className="flex items-center gap-2 text-[11px] font-mono leading-relaxed"
+                className={`flex items-center gap-2 text-[11px] font-mono leading-relaxed rounded ${
+                  flashIds.has(entry.id) ? "scanner-event-flash" : ""
+                }`}
               >
                 <span className="text-muted-foreground shrink-0">
                   [{entry.timestamp}]
                 </span>
-                <span className={`flex-1 truncate ${MSG_COLORS[entry.status]}`}>
-                  {entry.message} ...
+                {entry.isRealEvent && (
+                  <span className="shrink-0 text-red-500 font-bold text-[10px]">
+                    [ATTACK]
+                  </span>
+                )}
+                <span
+                  className={`flex-1 truncate ${
+                    entry.isRealEvent
+                      ? "text-red-400 font-semibold"
+                      : MSG_COLORS[entry.status]
+                  }`}
+                >
+                  {entry.message}
+                  {!entry.isRealEvent && " ..."}
                 </span>
                 <span
                   className={`shrink-0 text-[9px] border rounded px-1.5 py-0.5 tracking-widest font-bold ${
@@ -326,6 +388,7 @@ export default function DashboardPage({
   simulatedAttacks,
   threatTrend,
   preventionCoverage,
+  scannerEvents,
 }: DashboardPageProps) {
   return (
     <div className="p-6">
@@ -482,7 +545,7 @@ export default function DashboardPage({
       </div>
 
       {/* Live Scanner */}
-      <LiveScanner />
+      <LiveScanner externalEvents={scannerEvents} />
     </div>
   );
 }

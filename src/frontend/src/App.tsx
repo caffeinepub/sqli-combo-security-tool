@@ -24,6 +24,7 @@ import type {
   AlertStatus,
   Page,
   PreventionTask,
+  ScannerEvent,
   ThreatPoint,
   User,
 } from "./types";
@@ -46,6 +47,7 @@ export default function App() {
     severity: string;
     signal: string;
   } | null>(null);
+  const [scannerEvents, setScannerEvents] = useState<ScannerEvent[]>([]);
 
   const addActivity = useCallback((action: string, actor: string) => {
     setActivity((prev) => [
@@ -133,6 +135,21 @@ export default function App() {
         severity: newAlert.severity,
         signal: newAlert.signal,
       });
+      // Inject real FLAGGED event into the dashboard scanner
+      setScannerEvents((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }),
+          message: `${scenarioName} replay triggered — attack vector active`,
+          status: "FLAGGED",
+        },
+      ]);
     },
     [addActivity, user],
   );
@@ -227,6 +244,7 @@ export default function App() {
             simulatedAttacks={simulatedAttacks}
             threatTrend={threatTrend}
             preventionCoverage={preventionCoverage}
+            scannerEvents={scannerEvents}
           />
         );
       case "attack":
