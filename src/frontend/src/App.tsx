@@ -63,6 +63,7 @@ export default function App() {
     name: string;
   } | null>(null);
   const [scannerEvents, setScannerEvents] = useState<ScannerEvent[]>([]);
+  const [attackMode, setAttackMode] = useState<"auto" | "manual">("auto");
 
   const addActivity = useCallback((action: string, actor: string) => {
     setActivity((prev) => [
@@ -78,7 +79,6 @@ export default function App() {
 
   const handleLogin = useCallback(
     (email: string, password: string): boolean => {
-      // Normalise shorthand logins
       const normalEmail =
         email === "admin"
           ? "admin@combodefense.local"
@@ -248,9 +248,18 @@ export default function App() {
     [user, addActivity],
   );
 
-  // ── Auto-attack timer (every 90 seconds) ──
+  const handleTriggerManualAttack = useCallback(() => {
+    const autoAttack = generateAutoAttack();
+    setAttackPopup(autoAttack);
+    addActivity(
+      `Manual alert: ${autoAttack.name} from ${autoAttack.city}, India (${autoAttack.attackerIp})`,
+      "SYSTEM",
+    );
+  }, [addActivity]);
+
+  // ── Auto-attack timer (every 90 seconds) ── only fires in auto mode
   useEffect(() => {
-    if (!user || page === "login") return;
+    if (!user || page === "login" || attackMode !== "auto") return;
     const interval = setInterval(() => {
       const autoAttack = generateAutoAttack();
       setAttackPopup(autoAttack);
@@ -260,7 +269,7 @@ export default function App() {
       );
     }, 90000);
     return () => clearInterval(interval);
-  }, [user, page, addActivity]);
+  }, [user, page, addActivity, attackMode]);
 
   const threatLevel = Math.min(
     100,
@@ -342,7 +351,14 @@ export default function App() {
           />
         );
       case "users":
-        return <UsersPage currentUser={user} />;
+        return (
+          <UsersPage
+            currentUser={user}
+            attackMode={attackMode}
+            onSetAttackMode={setAttackMode}
+            onTriggerManualAttack={handleTriggerManualAttack}
+          />
+        );
       case "attack":
         return <AttackPage onRunReplay={handleRunReplay} />;
       case "detect":

@@ -8,6 +8,7 @@ import {
   Monitor,
   ShieldCheck,
   User as UserIcon,
+  Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -16,6 +17,9 @@ import type { User } from "../types";
 
 interface UsersPageProps {
   currentUser: User;
+  attackMode: "auto" | "manual";
+  onSetAttackMode: (mode: "auto" | "manual") => void;
+  onTriggerManualAttack: () => void;
 }
 
 type ScanTarget =
@@ -31,6 +35,14 @@ interface ScanFinding {
   label: string;
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
   detail: string;
+}
+
+interface AttackLogEntry {
+  id: string;
+  timestamp: string;
+  name: string;
+  city: string;
+  mode: "AUTO" | "MANUAL";
 }
 
 const SCAN_FINDINGS: Record<ScanTarget, ScanFinding[]> = {
@@ -288,7 +300,37 @@ const ROLE_COLORS: Record<
   },
 };
 
-export default function UsersPage({ currentUser }: UsersPageProps) {
+const ATTACK_NAMES = [
+  "SQL Injection",
+  "XSS Attack",
+  "Brute Force",
+  "Session Hijack",
+  "CSRF",
+  "Command Injection",
+  "Directory Traversal",
+  "DNS Spoofing",
+  "Buffer Overflow",
+];
+
+const INDIAN_CITIES = [
+  "Mumbai",
+  "Delhi",
+  "Bengaluru",
+  "Chennai",
+  "Hyderabad",
+  "Kolkata",
+  "Pune",
+  "Ahmedabad",
+  "Jaipur",
+  "Surat",
+];
+
+export default function UsersPage({
+  currentUser,
+  attackMode,
+  onSetAttackMode,
+  onTriggerManualAttack,
+}: UsersPageProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [scanMode, setScanMode] = useState<"entire" | "specific">("entire");
   const [specificTarget, setSpecificTarget] =
@@ -298,6 +340,7 @@ export default function UsersPage({ currentUser }: UsersPageProps) {
   const [scanProgress, setScanProgress] = useState(0);
   const [results, setResults] = useState<ScanFinding[] | null>(null);
   const [scanTimestamp, setScanTimestamp] = useState("");
+  const [attackLog, setAttackLog] = useState<AttackLogEntry[]>([]);
   const scanTarget: ScanTarget =
     scanMode === "entire" ? "entire" : specificTarget;
   const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -349,6 +392,21 @@ export default function UsersPage({ currentUser }: UsersPageProps) {
         }, 400);
       }
     }, interval);
+  };
+
+  const handleManualTrigger = () => {
+    const name = ATTACK_NAMES[Math.floor(Math.random() * ATTACK_NAMES.length)];
+    const city =
+      INDIAN_CITIES[Math.floor(Math.random() * INDIAN_CITIES.length)];
+    const entry: AttackLogEntry = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString(),
+      name,
+      city,
+      mode: "MANUAL",
+    };
+    setAttackLog((prev) => [entry, ...prev].slice(0, 5));
+    onTriggerManualAttack();
   };
 
   useEffect(() => {
@@ -897,6 +955,240 @@ export default function UsersPage({ currentUser }: UsersPageProps) {
           </div>
         </section>
       </div>
+
+      {/* ── Attack Mode Control Panel ── */}
+      <motion.section
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="mt-8"
+        data-ocid="attack_mode.panel"
+      >
+        <div
+          className="rounded-lg border p-5"
+          style={{
+            borderColor:
+              attackMode === "auto"
+                ? "rgba(34,197,94,0.35)"
+                : "rgba(251,146,60,0.35)",
+            background:
+              attackMode === "auto"
+                ? "rgba(34,197,94,0.04)"
+                : "rgba(251,146,60,0.04)",
+          }}
+        >
+          {/* Section header */}
+          <div className="flex items-center gap-2 mb-5">
+            <Zap
+              size={15}
+              style={{
+                color: attackMode === "auto" ? "#22c55e" : "#fb923c",
+              }}
+            />
+            <h2
+              className="text-xs font-bold tracking-[0.25em] uppercase"
+              style={{ color: attackMode === "auto" ? "#22c55e" : "#fb923c" }}
+            >
+              ATTACK MODE CONTROL
+            </h2>
+            <span
+              className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded border tracking-widest"
+              style={{
+                color: attackMode === "auto" ? "#4ade80" : "#fdba74",
+                borderColor:
+                  attackMode === "auto"
+                    ? "rgba(74,222,128,0.4)"
+                    : "rgba(253,186,116,0.4)",
+                background:
+                  attackMode === "auto"
+                    ? "rgba(74,222,128,0.08)"
+                    : "rgba(253,186,116,0.08)",
+              }}
+            >
+              {attackMode === "auto" ? "● ACTIVE" : "● STANDBY"}
+            </span>
+          </div>
+
+          {/* AUTO / MANUAL toggle */}
+          <div className="flex gap-3 mb-4">
+            <button
+              type="button"
+              data-ocid="attack_mode.auto.button"
+              onClick={() => onSetAttackMode("auto")}
+              className="flex-1 py-3 text-xs font-bold tracking-[0.2em] uppercase rounded border transition-all"
+              style={{
+                background:
+                  attackMode === "auto"
+                    ? "rgba(34,197,94,0.18)"
+                    : "transparent",
+                borderColor:
+                  attackMode === "auto"
+                    ? "rgba(34,197,94,0.8)"
+                    : "rgba(34,197,94,0.2)",
+                color: attackMode === "auto" ? "#4ade80" : "#4b5563",
+                boxShadow:
+                  attackMode === "auto"
+                    ? "0 0 16px rgba(34,197,94,0.25), inset 0 0 12px rgba(34,197,94,0.08)"
+                    : "none",
+              }}
+            >
+              ⚡ AUTO
+            </button>
+            <button
+              type="button"
+              data-ocid="attack_mode.manual.button"
+              onClick={() => onSetAttackMode("manual")}
+              className="flex-1 py-3 text-xs font-bold tracking-[0.2em] uppercase rounded border transition-all"
+              style={{
+                background:
+                  attackMode === "manual"
+                    ? "rgba(251,146,60,0.18)"
+                    : "transparent",
+                borderColor:
+                  attackMode === "manual"
+                    ? "rgba(251,146,60,0.8)"
+                    : "rgba(251,146,60,0.2)",
+                color: attackMode === "manual" ? "#fdba74" : "#4b5563",
+                boxShadow:
+                  attackMode === "manual"
+                    ? "0 0 16px rgba(251,146,60,0.25), inset 0 0 12px rgba(251,146,60,0.08)"
+                    : "none",
+              }}
+            >
+              🎯 MANUAL
+            </button>
+          </div>
+
+          {/* Status line */}
+          <div
+            className="rounded px-3 py-2 mb-4 text-[11px] tracking-wide"
+            style={{
+              background:
+                attackMode === "auto"
+                  ? "rgba(34,197,94,0.07)"
+                  : "rgba(251,146,60,0.07)",
+              border: `1px solid ${
+                attackMode === "auto"
+                  ? "rgba(34,197,94,0.2)"
+                  : "rgba(251,146,60,0.2)"
+              }`,
+              color: attackMode === "auto" ? "#86efac" : "#fed7aa",
+            }}
+          >
+            {attackMode === "auto" ? (
+              <>
+                <span className="font-bold">AUTO MODE ACTIVE</span> — Attack
+                alerts fire automatically every 90 seconds.
+              </>
+            ) : (
+              <>
+                <span className="font-bold">MANUAL MODE ACTIVE</span> — Auto
+                alerts paused. Use the button below to trigger manually.
+              </>
+            )}
+          </div>
+
+          {/* Manual trigger button */}
+          <AnimatePresence>
+            {attackMode === "manual" && (
+              <motion.div
+                key="manual-trigger"
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                className="overflow-hidden"
+              >
+                <button
+                  type="button"
+                  data-ocid="attack_mode.trigger.button"
+                  onClick={handleManualTrigger}
+                  className="w-full py-3.5 text-sm font-bold tracking-[0.2em] uppercase rounded border transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  style={{
+                    background: "rgba(251,146,60,0.15)",
+                    borderColor: "rgba(251,146,60,0.7)",
+                    color: "#fdba74",
+                    boxShadow:
+                      "0 0 20px rgba(251,146,60,0.2), inset 0 0 16px rgba(251,146,60,0.06)",
+                  }}
+                >
+                  ⚡ TRIGGER ATTACK NOW
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Attack trigger log */}
+          <div>
+            <p className="text-[10px] text-muted-foreground tracking-[0.25em] uppercase mb-2">
+              TRIGGER LOG (last 5)
+            </p>
+            <div
+              className="rounded border space-y-1 min-h-[60px]"
+              style={{
+                borderColor: "rgba(255,255,255,0.06)",
+                background: "rgba(0,0,0,0.35)",
+                padding: "8px",
+              }}
+              data-ocid="attack_mode.table"
+            >
+              <AnimatePresence>
+                {attackLog.length === 0 ? (
+                  <motion.p
+                    key="empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="text-[10px] text-muted-foreground/50 text-center py-3 tracking-widest"
+                    data-ocid="attack_mode.empty_state"
+                  >
+                    No attacks triggered yet.
+                  </motion.p>
+                ) : (
+                  attackLog.map((entry, i) => (
+                    <motion.div
+                      key={entry.id}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 12 }}
+                      transition={{ delay: i * 0.04 }}
+                      data-ocid={`attack_mode.item.${i + 1}`}
+                      className="flex items-center gap-2 py-1 border-b last:border-b-0"
+                      style={{ borderColor: "rgba(255,255,255,0.05)" }}
+                    >
+                      <span className="text-[9px] text-muted-foreground shrink-0 tabular-nums">
+                        {entry.timestamp}
+                      </span>
+                      <span className="text-[10px] text-foreground/80 flex-1 truncate">
+                        {entry.name}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground shrink-0">
+                        {entry.city}, IN
+                      </span>
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-widest shrink-0"
+                        style={{
+                          color:
+                            entry.mode === "MANUAL" ? "#fdba74" : "#4ade80",
+                          borderColor:
+                            entry.mode === "MANUAL"
+                              ? "rgba(253,186,116,0.4)"
+                              : "rgba(74,222,128,0.4)",
+                          background:
+                            entry.mode === "MANUAL"
+                              ? "rgba(253,186,116,0.08)"
+                              : "rgba(74,222,128,0.08)",
+                        }}
+                      >
+                        {entry.mode}
+                      </span>
+                    </motion.div>
+                  ))
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      </motion.section>
 
       {/* Footer */}
       <footer className="mt-10 text-center text-[10px] text-muted-foreground">
