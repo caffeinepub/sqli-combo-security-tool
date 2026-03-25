@@ -6,6 +6,7 @@ import {
   LogOut,
   Shield,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import type { Page, User } from "../types";
 
@@ -22,6 +23,7 @@ const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
     label: "DASHBOARD",
     icon: <LayoutDashboard size={16} />,
   },
+  { page: "users", label: "USERS", icon: <Users size={16} /> },
   { page: "attack", label: "ATTACK", icon: <Crosshair size={16} /> },
   { page: "detect", label: "DETECT", icon: <Shield size={16} /> },
   { page: "prevent", label: "PREVENT", icon: <ShieldCheck size={16} /> },

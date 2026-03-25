@@ -1,13 +1,17 @@
 import { Toaster } from "@/components/ui/sonner";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import AdminAnalystResolvedNotification from "./components/AdminAnalystResolvedNotification";
+import AnalystDefendedNotification from "./components/AnalystDefendedNotification";
 import AttackAlertPopup from "./components/AttackAlertPopup";
 import Sidebar from "./components/Sidebar";
 import {
   INITIAL_ACTIVITY,
   INITIAL_ALERTS,
   INITIAL_PREVENTION_TASKS,
+  generateAutoAttack,
   generateInitialThreatTrend,
+  getScenarioMeta,
 } from "./data";
 import ActivityPage from "./pages/ActivityPage";
 import AttackPage from "./pages/AttackPage";
@@ -18,6 +22,8 @@ import PreventPage from "./pages/PreventPage";
 import ReportsPage from "./pages/ReportsPage";
 import ScanPage from "./pages/ScanPage";
 import SecurityLogoPage from "./pages/SecurityLogoPage";
+import SqliGuardLogoPage from "./pages/SqliGuardLogoPage";
+import UsersPage from "./pages/UsersPage";
 import type {
   ActivityEntry,
   Alert,
@@ -32,6 +38,7 @@ import type {
 export default function App() {
   const [page, setPage] = useState<Page>("login");
   const [user, setUser] = useState<User | null>(null);
+  const [showSqliLogo, setShowSqliLogo] = useState(false);
   const [showSecurityLogo, setShowSecurityLogo] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>(INITIAL_ALERTS);
@@ -46,6 +53,14 @@ export default function App() {
     name: string;
     severity: string;
     signal: string;
+    city?: string;
+    attackerIp?: string;
+  } | null>(null);
+  const [analystNotification, setAnalystNotification] = useState<{
+    name: string;
+  } | null>(null);
+  const [adminCrossRoleNotification, setAdminCrossRoleNotification] = useState<{
+    name: string;
   } | null>(null);
   const [scannerEvents, setScannerEvents] = useState<ScannerEvent[]>([]);
 
@@ -63,26 +78,71 @@ export default function App() {
 
   const handleLogin = useCallback(
     (email: string, password: string): boolean => {
-      if (email === "admin@combodefense.local" && password === "admin123") {
-        const u: User = { name: "Security Admin", email, role: "admin" };
+      // Normalise shorthand logins
+      const normalEmail =
+        email === "admin"
+          ? "admin@combodefense.local"
+          : email === "analyst"
+            ? "analyst@combodefense.local"
+            : email === "coadmin"
+              ? "coadmin@combodefense.local"
+              : email;
+
+      if (
+        normalEmail === "admin@combodefense.local" &&
+        password === "admin123"
+      ) {
+        const u: User = {
+          name: "Security Admin",
+          email: normalEmail,
+          role: "admin",
+        };
         setUser(u);
-        setShowSecurityLogo(true);
+        setShowSqliLogo(true);
         setScanning(false);
-        addActivity("User logged in", email);
+        addActivity("User logged in", normalEmail);
         return true;
       }
-      if (email === "analyst@combodefense.local" && password === "analyst123") {
-        const u: User = { name: "Security Analyst", email, role: "analyst" };
+      if (
+        normalEmail === "coadmin@combodefense.local" &&
+        password === "coadmin123"
+      ) {
+        const u: User = {
+          name: "Co-Admin Officer",
+          email: normalEmail,
+          role: "admin",
+          displayRole: "CO-ADMIN",
+        };
         setUser(u);
-        setShowSecurityLogo(true);
+        setShowSqliLogo(true);
         setScanning(false);
-        addActivity("User logged in", email);
+        addActivity("User logged in", normalEmail);
+        return true;
+      }
+      if (
+        normalEmail === "analyst@combodefense.local" &&
+        password === "analyst123"
+      ) {
+        const u: User = {
+          name: "Security Analyst",
+          email: normalEmail,
+          role: "analyst",
+        };
+        setUser(u);
+        setShowSqliLogo(true);
+        setScanning(false);
+        addActivity("User logged in", normalEmail);
         return true;
       }
       return false;
     },
     [addActivity],
   );
+
+  const handleSqliLogoComplete = useCallback(() => {
+    setShowSqliLogo(false);
+    setShowSecurityLogo(true);
+  }, []);
 
   const handleSecurityLogoComplete = useCallback(() => {
     setShowSecurityLogo(false);
@@ -102,6 +162,7 @@ export default function App() {
 
   const handleRunReplay = useCallback(
     (scenarioName: string, scenarioId: string) => {
+      const meta = getScenarioMeta(scenarioName);
       const newAlert: Alert = {
         id: `alert-${Date.now()}`,
         scenarioName,
@@ -109,49 +170,44 @@ export default function App() {
         status: "open",
         signal: "Input sanitizer bypass attempt detected",
         timestamp: new Date().toISOString(),
+        hackerIp: meta.hackerIp,
+        attackType: meta.attackType,
+        reattackLoop: meta.reattackLoop,
       };
       setAlerts((prev) => [newAlert, ...prev]);
       setThreatTrend((prev) => {
         const now = new Date();
-        const level = Math.min(100, (prev[prev.length - 1]?.level ?? 40) + 15);
         return [
-          ...prev.slice(-11),
+          ...prev.slice(1),
           {
             time: now.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             }),
-            level,
+            level: Math.min(100, (prev[prev.length - 1]?.level ?? 50) + 25),
           },
         ];
       });
-      addActivity(`Ran ${scenarioName} safe replay`, user?.email ?? "SYSTEM");
-      toast.success(
-        `${scenarioName}: Safe replay completed. Detection and prevention workflows were updated.`,
-      );
-      // Show attack popup
-      setAttackPopup({
-        name: scenarioName,
-        severity: newAlert.severity,
-        signal: newAlert.signal,
-      });
-      // Inject real FLAGGED event into the dashboard scanner
+      addActivity(`Replay executed: ${scenarioName}`, user?.email ?? "system");
       setScannerEvents((prev) => [
         ...prev,
         {
           id: Date.now(),
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          }),
-          message: `${scenarioName} replay triggered — attack vector active`,
+          timestamp: new Date().toLocaleTimeString(),
+          message: `FLAGGED: ${scenarioName} replay triggered`,
           status: "FLAGGED",
         },
       ]);
+      if (user?.role === "admin") {
+        setAttackPopup({
+          name: scenarioName,
+          severity: scenarioId === "sqli" ? "critical" : "high",
+          signal: meta.attackType,
+        });
+      }
+      toast.error(`Attack replay: ${scenarioName}`, { duration: 3000 });
     },
-    [addActivity, user],
+    [user, addActivity],
   );
 
   const handleUpdateAlertStatus = useCallback(
@@ -159,23 +215,52 @@ export default function App() {
       setAlerts((prev) =>
         prev.map((a) => (a.id === alertId ? { ...a, status } : a)),
       );
-      const alert = alerts.find((a) => a.id === alertId);
-      if (alert)
-        addActivity(
-          `Alert for ${alert.scenarioName} status changed to ${status.toUpperCase()}`,
-          user?.email ?? "SYSTEM",
-        );
+      addActivity(
+        `Alert ${alertId} status updated to ${status.toUpperCase()}`,
+        user?.email ?? "system",
+      );
+      if (status === "resolved") {
+        const alert = alerts.find((a) => a.id === alertId);
+        if (alert) {
+          if (user?.role === "analyst") {
+            setAnalystNotification({ name: alert.scenarioName });
+          } else if (user?.role === "admin") {
+            setAdminCrossRoleNotification({ name: alert.scenarioName });
+          }
+        }
+      }
     },
-    [alerts, addActivity, user],
+    [user, alerts, addActivity],
   );
 
-  const handleToggleTask = useCallback((taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId ? { ...t, completed: !t.completed } : t,
-      ),
-    );
-  }, []);
+  const handleToggleTask = useCallback(
+    (taskId: string) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, completed: !t.completed } : t,
+        ),
+      );
+      addActivity(
+        `Prevention task toggled: ${taskId}`,
+        user?.email ?? "system",
+      );
+    },
+    [user, addActivity],
+  );
+
+  // ── Auto-attack timer (every 90 seconds) ──
+  useEffect(() => {
+    if (!user || page === "login") return;
+    const interval = setInterval(() => {
+      const autoAttack = generateAutoAttack();
+      setAttackPopup(autoAttack);
+      addActivity(
+        `Auto-alert: ${autoAttack.name} from ${autoAttack.city}, India (${autoAttack.attackerIp})`,
+        "SYSTEM",
+      );
+    }, 90000);
+    return () => clearInterval(interval);
+  }, [user, page, addActivity]);
 
   const threatLevel = Math.min(
     100,
@@ -205,6 +290,15 @@ export default function App() {
   const openAlerts = alerts.filter((a) => a.status === "open").length;
   const blockedAttempts = alerts.filter((a) => a.status === "resolved").length;
   const simulatedAttacks = alerts.length;
+
+  if (showSqliLogo) {
+    return (
+      <>
+        <SqliGuardLogoPage onComplete={handleSqliLogoComplete} />
+        <Toaster theme="dark" />
+      </>
+    );
+  }
 
   if (showSecurityLogo) {
     return (
@@ -247,6 +341,8 @@ export default function App() {
             scannerEvents={scannerEvents}
           />
         );
+      case "users":
+        return <UsersPage currentUser={user} />;
       case "attack":
         return <AttackPage onRunReplay={handleRunReplay} />;
       case "detect":
@@ -293,6 +389,18 @@ export default function App() {
         attack={attackPopup}
         onDismiss={() => setAttackPopup(null)}
       />
+      {user.role === "analyst" && (
+        <AnalystDefendedNotification
+          attack={analystNotification}
+          onDismiss={() => setAnalystNotification(null)}
+        />
+      )}
+      {user.role === "admin" && (
+        <AdminAnalystResolvedNotification
+          notification={adminCrossRoleNotification}
+          onDismiss={() => setAdminCrossRoleNotification(null)}
+        />
+      )}
     </div>
   );
 }

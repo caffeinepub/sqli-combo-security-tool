@@ -125,10 +125,8 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
   const poolIndexRef = useRef(0);
   const secondsRef = useRef(0);
   const prevExternalLengthRef = useRef(0);
-  // Track which ids are currently flashing
   const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
 
-  // Add new scan entry every 1.5s
   useEffect(() => {
     const interval = setInterval(() => {
       secondsRef.current += 2;
@@ -158,12 +156,10 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Watch externalEvents for new real attack events
   useEffect(() => {
     if (!externalEvents || externalEvents.length === 0) return;
     if (externalEvents.length <= prevExternalLengthRef.current) return;
 
-    // Inject all newly added events
     const newEvents = externalEvents.slice(prevExternalLengthRef.current);
     prevExternalLengthRef.current = externalEvents.length;
 
@@ -189,10 +185,8 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
       return trimmed;
     });
 
-    // Mark new event ids as flashing
     const newIds = new Set(injected.map((e) => e.id));
     setFlashIds((prev) => new Set([...prev, ...newIds]));
-    // Remove flash after 1.2s
     setTimeout(() => {
       setFlashIds((prev) => {
         const next = new Set(prev);
@@ -202,7 +196,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
     }, 1200);
   }, [externalEvents]);
 
-  // Progress bar looping 0→100 every 10s
   useEffect(() => {
     const interval = setInterval(() => {
       setProgress((p) => (p >= 100 ? 0 : p + 1));
@@ -215,7 +208,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
       className="bg-card border border-border rounded p-4 mt-4"
       data-ocid="dashboard.scanner.panel"
     >
-      {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
           <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-0.5">
@@ -225,7 +217,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
             REAL-TIME SCANNER
           </p>
         </div>
-        {/* Pulsing SCANNING badge */}
         <div className="flex items-center gap-2 border border-emerald-500/40 bg-emerald-500/10 rounded px-3 py-1">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -238,14 +229,11 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
         </div>
       </div>
 
-      {/* Sweep + log container */}
       <div className="grid grid-cols-5 gap-3">
-        {/* Sweep panel */}
         <div
           className="col-span-2 relative rounded overflow-hidden border border-border"
           style={{ height: 220, background: "oklch(0.09 0.012 248)" }}
         >
-          {/* Matrix grid lines */}
           <svg
             aria-hidden="true"
             className="absolute inset-0 w-full h-full opacity-20"
@@ -269,7 +257,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
             <rect width="100%" height="100%" fill="url(#scanner-grid)" />
           </svg>
 
-          {/* Vertical radar columns */}
           {[20, 40, 60, 80].map((x) => (
             <div
               key={x}
@@ -278,10 +265,8 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
             />
           ))}
 
-          {/* Horizontal sweep line */}
           <div className="scan-sweep-line" />
 
-          {/* Corner labels */}
           <div className="absolute top-2 left-2 text-[9px] font-mono text-emerald-400/60 tracking-widest">
             NET::SCAN
           </div>
@@ -289,7 +274,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
             LIVE
           </div>
 
-          {/* Blip dots */}
           {BLIP_DOTS.map((dot) => (
             <div
               key={dot.id}
@@ -305,7 +289,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
           ))}
         </div>
 
-        {/* Log area */}
         <div className="col-span-3 flex flex-col">
           <div
             ref={logRef}
@@ -353,7 +336,6 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
             ))}
           </div>
 
-          {/* Progress bar */}
           <div className="mt-3">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[9px] font-mono text-muted-foreground tracking-widest">
@@ -374,6 +356,216 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
                 }}
               />
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ML Anomaly Panel ────────────────────────────────────────────────────────
+
+type AnomalyStatus = "NORMAL" | "ANOMALOUS" | "CRITICAL";
+
+interface AnomalyPoint {
+  time: string;
+  score: number;
+  status: AnomalyStatus;
+}
+
+const TFIDF_FEATURES = [
+  { keyword: "sql_union_select", weight: 0.94 },
+  { keyword: "xss_script_tag", weight: 0.87 },
+  { keyword: "csrf_token_missing", weight: 0.76 },
+  { keyword: "cmd_injection", weight: 0.71 },
+  { keyword: "path_traversal", weight: 0.65 },
+  { keyword: "brute_force_pattern", weight: 0.58 },
+];
+
+function getAnomalyStatus(score: number): AnomalyStatus {
+  if (score < 30) return "NORMAL";
+  if (score <= 70) return "ANOMALOUS";
+  return "CRITICAL";
+}
+
+function makeTimeLabel() {
+  const now = new Date();
+  return `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+}
+
+function MLAnomalyPanel() {
+  const [dataPoints, setDataPoints] = useState<AnomalyPoint[]>(() => {
+    const pts: AnomalyPoint[] = [];
+    let score = 45;
+    for (let i = 0; i < 20; i++) {
+      score = Math.min(95, Math.max(5, score + (Math.random() * 30 - 15)));
+      pts.push({
+        time: `T-${20 - i}`,
+        score: Math.round(score),
+        status: getAnomalyStatus(score),
+      });
+    }
+    return pts;
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDataPoints((prev) => {
+        const last = prev[prev.length - 1];
+        const newScore = Math.min(
+          95,
+          Math.max(5, last.score + (Math.random() * 30 - 15)),
+        );
+        const rounded = Math.round(newScore);
+        const next: AnomalyPoint = {
+          time: makeTimeLabel(),
+          score: rounded,
+          status: getAnomalyStatus(rounded),
+        };
+        const updated = [...prev.slice(1), next];
+        return updated;
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const current = dataPoints[dataPoints.length - 1];
+  const statusColor =
+    current.status === "NORMAL"
+      ? "text-emerald-400 border-emerald-400/40 bg-emerald-400/10"
+      : current.status === "ANOMALOUS"
+        ? "text-yellow-400 border-yellow-400/40 bg-yellow-400/10"
+        : "text-red-400 border-red-400/40 bg-red-400/10";
+
+  const dotColor =
+    current.status === "NORMAL"
+      ? "bg-emerald-400"
+      : current.status === "ANOMALOUS"
+        ? "bg-yellow-400"
+        : "bg-red-400";
+
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.ml.panel"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-cyber-cyan text-[10px] font-mono">■</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          ML ENGINE
+        </span>
+      </div>
+      <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground mb-4">
+        MACHINE LEARNING ANALYSIS
+      </p>
+
+      <div className="grid grid-cols-5 gap-4">
+        {/* Left: anomaly graph (60%) */}
+        <div className="col-span-3">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+                ML ANOMALY DETECTION
+              </p>
+              <p className="text-[9px] font-mono text-muted-foreground/60">
+                XGBoost Real-Time Classifier
+              </p>
+            </div>
+            <span
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-mono font-bold tracking-widest ${statusColor}`}
+            >
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full ${dotColor}`}
+              />
+              {current.status}
+            </span>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart
+              data={dataPoints}
+              margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="oklch(0.22 0.01 248)"
+                strokeOpacity={0.4}
+              />
+              <XAxis
+                dataKey="time"
+                tick={{
+                  fill: "oklch(0.45 0 0)",
+                  fontSize: 9,
+                  fontFamily: "monospace",
+                }}
+                axisLine={false}
+                tickLine={false}
+                interval={4}
+              />
+              <YAxis
+                tick={{
+                  fill: "oklch(0.45 0 0)",
+                  fontSize: 9,
+                  fontFamily: "monospace",
+                }}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, 100]}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "oklch(0.13 0.012 248)",
+                  border: "1px solid oklch(0.22 0.01 248)",
+                  borderRadius: 4,
+                  fontFamily: "monospace",
+                  fontSize: 10,
+                }}
+                labelStyle={{ color: "oklch(0.55 0 0)" }}
+                itemStyle={{ color: "#00d4d4" }}
+                formatter={(v: number) => [`${v}%`, "Anomaly Score"]}
+              />
+              <Line
+                type="monotone"
+                dataKey="score"
+                stroke="#00d4d4"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 3, fill: "#00d4d4" }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Right: TF-IDF feature weights (40%) */}
+        <div className="col-span-2">
+          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3">
+            TF-IDF FEATURE WEIGHTS
+          </p>
+          <div className="space-y-2">
+            {TFIDF_FEATURES.map((f) => (
+              <div key={f.keyword}>
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] font-mono text-foreground/80 truncate pr-2">
+                    {f.keyword}
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400 shrink-0">
+                    {f.weight.toFixed(2)}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 rounded bg-secondary overflow-hidden">
+                  <div
+                    className="h-full rounded"
+                    style={{
+                      width: `${f.weight * 100}%`,
+                      background:
+                        "linear-gradient(90deg, oklch(0.55 0.18 145), oklch(0.72 0.2 155))",
+                      boxShadow: "0 0 6px oklch(0.65 0.2 150 / 0.6)",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -546,6 +738,9 @@ export default function DashboardPage({
 
       {/* Live Scanner */}
       <LiveScanner externalEvents={scannerEvents} />
+
+      {/* ML Anomaly Panel */}
+      <MLAnomalyPanel />
     </div>
   );
 }

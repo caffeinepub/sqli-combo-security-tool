@@ -1,11 +1,14 @@
 import { AlertTriangle, ShieldAlert, X, Zap } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { playAlarmSound } from "../hooks/useSoundEffect";
 
 interface AttackInfo {
   name: string;
   severity: string;
   signal: string;
+  city?: string;
+  attackerIp?: string;
 }
 
 interface AttackAlertPopupProps {
@@ -13,7 +16,7 @@ interface AttackAlertPopupProps {
   onDismiss: () => void;
 }
 
-const DURATION = 10;
+const DURATION = 90;
 
 export default function AttackAlertPopup({
   attack,
@@ -37,6 +40,7 @@ export default function AttackAlertPopup({
     }
 
     setRemaining(DURATION);
+    playAlarmSound();
 
     timerRef.current = setInterval(() => {
       setRemaining((prev) => {
@@ -169,12 +173,28 @@ export default function AttackAlertPopup({
                     {attack.severity}
                   </span>
                 </div>
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-2 mb-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" />
                   <p className="font-mono text-xs text-yellow-300/80 leading-relaxed">
                     {attack.signal}
                   </p>
                 </div>
+                {attack.city && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs">📍</span>
+                    <p className="font-mono text-xs text-orange-300/80">
+                      {attack.city}, India
+                    </p>
+                  </div>
+                )}
+                {attack.attackerIp && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs">🖥</span>
+                    <p className="font-mono text-xs text-orange-300/80">
+                      {attack.attackerIp}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Countdown bar */}

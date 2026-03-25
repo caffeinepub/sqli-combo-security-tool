@@ -5,14 +5,23 @@ export type Page =
   | "detect"
   | "prevent"
   | "reports"
-  | "activity";
+  | "activity"
+  | "users";
 
-export type Role = "admin" | "analyst";
+export type Role =
+  | "admin"
+  | "analyst"
+  | "coadmin"
+  | "viewer"
+  | "monitor"
+  | "auditor"
+  | "responder";
 
 export interface User {
   name: string;
   email: string;
   role: Role;
+  displayRole?: string;
 }
 
 export type Severity = "critical" | "high" | "medium" | "low";
@@ -25,6 +34,9 @@ export interface Alert {
   status: AlertStatus;
   signal: string;
   timestamp: string;
+  hackerIp?: string;
+  attackType?: string;
+  reattackLoop?: string[];
 }
 
 export interface PreventionTask {
@@ -60,4 +72,18 @@ export interface ScannerEvent {
   timestamp: string;
   message: string;
   status: "FLAGGED";
+}
+
+export interface ExtendedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: "online" | "offline";
+  lastLogin: string;
+  sessionIp: string;
+  pagesVisited: string[];
+  attacksTriggered: number;
+  alertsResolved: number;
+  activityLog: { timestamp: string; action: string }[];
 }
