@@ -1,30 +1,30 @@
-# SQLi Combo Security Tool
+# SQLi Combo Defense Console
 
 ## Current State
-App.tsx has an auto-attack timer (every 90 seconds) that fires `setAttackPopup(autoAttack)` regardless of any mode setting. UsersPage.tsx has a System Scanner section and user activity cards but no Auto/Manual tab.
+AttackPage renders cards from `ATTACK_SCENARIOS` array in `data.ts`. Currently 10 attack scenarios: SQLi, XSS, Session Hijack, Rate-Limit Bypass, CSRF, Command Injection, Directory Traversal, MITM, DNS Spoofing, Buffer Overflow.
+
+PreventPage renders collapsible guide cards from `PREVENTION_GUIDES` array in `data.ts`. Currently 6 guides for the newer attack types (CSRF, Command Injection, Directory Traversal, MITM, DNS Spoofing, Buffer Overflow).
+
+`SCENARIO_META` in `data.ts` maps scenario names to hacker IP, attack type, and reattack loop for popup alerts.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `attackMode` state (`'auto' | 'manual'`) in App.tsx, defaulting to `'auto'`
-- `onSetAttackMode` and `onTriggerManualAttack` props passed to `UsersPage`
-- An **Attack Mode** tab panel in `UsersPage`, placed below the System Scanner section
-- The tab panel contains:
-  - A large toggle/switch labeled AUTO / MANUAL
-  - When AUTO: shows status "Auto alerts fire every 90 seconds"
-  - When MANUAL: shows a "TRIGGER ATTACK NOW" button that fires a manual popup immediately
-  - A small log showing the last 5 triggered attacks (timestamp, type, city, mode)
+- **Script Injection attack** in `ATTACK_SCENARIOS` -- a distinct attack from XSS, focusing on inline script execution via event handlers and javascript: URIs in DOM contexts, not just `<script>` tags. Severity: high.
+- **Forced Login attack** (credential stuffing / authentication bypass) in `ATTACK_SCENARIOS` -- distinct from Brute Force, uses breached credential databases and account enumeration. Severity: critical.
+- **Scenario metadata** for both new attacks in `SCENARIO_META` (hackerIp, attackType, reattackLoop).
+- **Prevention guide for Script Injection** in `PREVENTION_GUIDES` with attack vector description, 4 mitigation steps, code example, OWASP A03:2021, NIST SP 800-53: SI-10, SI-15 references.
+- **Prevention guide for Forced Login** in `PREVENTION_GUIDES` with attack vector description, 4 mitigation steps, code example, OWASP A07:2021, NIST SP 800-53: AC-2, IA-5 references.
 
 ### Modify
-- Auto-attack timer in App.tsx: only fires if `attackMode === 'auto'`
-- `onTriggerManualAttack` in App.tsx calls `generateAutoAttack()` and fires `setAttackPopup` immediately (same logic as auto-timer)
-- `UsersPage` props extended with `attackMode`, `onSetAttackMode`, `onTriggerManualAttack`
-- `UsersPage` renders the new Attack Mode tab after the scanner grid
+- Nothing (purely additive)
 
 ### Remove
 - Nothing
 
 ## Implementation Plan
-1. Add `attackMode` state to App.tsx, guard auto-timer with it, add `handleTriggerManualAttack`, pass props to `UsersPage`
-2. In `UsersPage`, add `attackMode`, `onSetAttackMode`, `onTriggerManualAttack` to props interface
-3. Add Attack Mode panel section below the scanner grid in `UsersPage` with toggle and trigger button, attack log
+1. Add two new `AttackScenario` objects to `ATTACK_SCENARIOS` in `src/frontend/src/data.ts`.
+2. Add two new entries to `SCENARIO_META` in `data.ts`.
+3. Add two new `PreventionGuide` objects to `PREVENTION_GUIDES` in `data.ts`.
+4. No page file changes needed -- both arrays are already wired up to render cards automatically.
+5. Run lint + typecheck + build to verify no regressions.

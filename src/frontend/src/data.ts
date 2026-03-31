@@ -142,6 +142,34 @@ export const ATTACK_SCENARIOS: AttackScenario[] = [
     prevention:
       "Enforce strict input length limits and use memory-safe languages or compiler protections.",
   },
+  {
+    id: "scriptinject",
+    name: "Script Injection Attack",
+    severity: "high",
+    description:
+      "Exploits inline event handlers, javascript: URIs, and DOM-based script execution vectors that bypass tag-based filters.",
+    steps: [
+      "Inject javascript: URI into anchor href or src attributes",
+      "Trigger execution via DOM event handlers (onmouseover, onerror)",
+      "Observe CSP bypass and unauthorized script execution",
+    ],
+    prevention:
+      "Enforce strict CSP, disallow javascript: URIs, and sanitize all DOM-inserted content.",
+  },
+  {
+    id: "forcedlogin",
+    name: "Forced Login (Credential Stuffing)",
+    severity: "critical",
+    description:
+      "Uses breached credential databases and account enumeration to systematically compromise accounts with known username/password pairs.",
+    steps: [
+      "Load breached credential list (e.g. HaveIBeenPwned dumps)",
+      "Enumerate valid accounts via login response timing/error differences",
+      "Attempt credential stuffing across enumerated accounts",
+    ],
+    prevention:
+      "Implement MFA, account lockout policies, and monitor for unusual login velocity from distinct IPs.",
+  },
 ];
 
 export interface PreventionGuide {
@@ -343,6 +371,92 @@ void process_input(const char *raw_input) {
 // Compile with: gcc -fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2`,
     owasp: "OWASP A06:2021 — Vulnerable and Outdated Components",
     nist: "NIST SP 800-53: SI-16, SA-11",
+    severity: "critical",
+  },
+  {
+    id: "scriptinject",
+    title: "Script Injection Prevention",
+    attackVector:
+      "Script Injection attacks go beyond classic <script> tag injection to exploit DOM event handlers (onerror, onload, onmouseover), javascript: URIs in href/src attributes, and template literal injection. These vectors often bypass tag-based WAF rules and sanitizers that only strip <script> tags.",
+    mitigation: [
+      "Enforce a strict Content Security Policy (CSP) with script-src 'nonce-...' or 'sha256-...' to block inline script execution from injected content.",
+      "Block javascript: URIs at the input validation layer and in link-building logic; never use user-supplied data as href/src without allowlist validation.",
+      "Use a proven DOM sanitization library (DOMPurify) before inserting any user content into the DOM -- never use innerHTML with unsanitized input.",
+      "Apply output encoding appropriate to the context (HTML entity encoding for HTML body, JavaScript encoding for JS strings, URL encoding for href attributes).",
+    ],
+    codeExample: `// DOMPurify — sanitize before DOM insertion
+import DOMPurify from 'dompurify';
+
+// Configure strict policy
+const SAFE_CONFIG = {
+  ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'],
+  ALLOWED_ATTR: ['href', 'title'],
+  FORBID_ATTR: ['style', 'onerror', 'onload'],
+  FORBID_CONTENTS: ['script'],
+};
+
+// Block javascript: URIs
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.hasAttribute('href')) {
+    const href = node.getAttribute('href') ?? '';
+    if (/^javascript:/i.test(href)) {
+      node.removeAttribute('href');
+    }
+  }
+});
+
+// Safe insertion
+document.getElementById('content')!.innerHTML =
+  DOMPurify.sanitize(userInput, SAFE_CONFIG);
+
+// CSP header
+// Content-Security-Policy: default-src 'self';
+//   script-src 'self' 'nonce-{random}';
+//   object-src 'none';`,
+    owasp: "OWASP A03:2021 — Injection",
+    nist: "NIST SP 800-53: SI-10, SI-15",
+    severity: "high",
+  },
+  {
+    id: "forcedlogin",
+    title: "Forced Login / Credential Stuffing Prevention",
+    attackVector:
+      "Credential Stuffing attacks replay username/password pairs leaked in third-party data breaches against your login endpoints. Unlike brute-force attacks that guess passwords, stuffing uses real credentials, achieving high success rates (1-3%) with low request volumes. Account enumeration via login response differences allows attackers to identify valid accounts before stuffing.",
+    mitigation: [
+      "Enforce Multi-Factor Authentication (MFA/TOTP) for all accounts -- even correct credentials are useless without the second factor.",
+      "Normalize all authentication error responses (timing, message, status code) to prevent account enumeration -- always return the same generic error.",
+      "Implement device fingerprinting and behavioral velocity controls: flag logins from IPs attempting >10 unique accounts per hour.",
+      "Integrate HaveIBeenPwned Passwords API (k-anonymity model) to block known-breached passwords at registration and password change.",
+    ],
+    codeExample: `// Express.js — credential stuffing defenses
+import rateLimit from 'express-rate-limit';
+import { pwnedPassword } from 'hibp';
+
+// 1. Rate limit login by IP and username
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 10,                    // max 10 attempts per IP
+  keyGenerator: (req) => req.body.username + req.ip,
+  message: 'Too many attempts, try again later',
+});
+
+// 2. Constant-time response to prevent timing enumeration
+async function verifyLogin(username: string, password: string) {
+  const user = await db.findUser(username);
+  const hash = user?.passwordHash ?? DUMMY_HASH;
+  // Always run bcrypt, even if user not found
+  const valid = await bcrypt.compare(password, hash);
+  if (!user || !valid) throw new Error('Invalid credentials');
+  return user;
+}
+
+// 3. Block breached passwords on registration
+async function checkBreached(password: string) {
+  const count = await pwnedPassword(password);
+  if (count > 0) throw new Error('Password found in breach database');
+}`,
+    owasp: "OWASP A07:2021 — Identification and Authentication Failures",
+    nist: "NIST SP 800-53: AC-2, IA-5, IA-11",
     severity: "critical",
   },
 ];
@@ -594,6 +708,28 @@ const SCENARIO_META: Record<
       "T+25s → Return address overwritten with shellcode addr",
       "T+40s → NOP sled + shellcode executed",
       "T+58s → Privilege escalation attempt post-exploitation",
+    ],
+  },
+  "Script Injection Attack": {
+    hackerIp: "62.233.57.12",
+    attackType: "Script Injection (DOM-based Event Handler)",
+    reattackLoop: [
+      "T+0s  → javascript: URI injected in anchor tag",
+      "T+10s → onerror handler triggered on image element",
+      "T+22s → onmouseover payload delivered via SVG",
+      "T+35s → CSP bypass attempted via base64 data URI",
+      "T+50s → Script exfiltrates session cookie via fetch",
+    ],
+  },
+  "Forced Login (Credential Stuffing)": {
+    hackerIp: "185.156.73.44",
+    attackType: "Credential Stuffing (Breached DB Replay)",
+    reattackLoop: [
+      "T+0s  → Loaded 50,000 breached credential pairs",
+      "T+5s  → Account enumeration via response timing",
+      "T+20s → 1st batch: 500 credential pairs attempted",
+      "T+38s → 12 valid accounts identified via success response",
+      "T+55s → Session tokens harvested for 12 compromised accounts",
     ],
   },
 };
