@@ -37,10 +37,6 @@ export interface Alert {
   hackerIp?: string;
   attackType?: string;
   reattackLoop?: string[];
-  city?: string;
-  triggeredBy?: string;
-  resolvedBy?: string;
-  mlThreatScore?: number;
 }
 
 export interface PreventionTask {
