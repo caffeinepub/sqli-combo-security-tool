@@ -37,6 +37,10 @@ export default function Sidebar({
   user,
   onLogout,
 }: SidebarProps) {
+  const visibleNavItems = navItems.filter(
+    (item) => item.page !== "reports" || user.role === "admin",
+  );
+
   return (
     <aside className="w-56 flex flex-col shrink-0 bg-sidebar border-r border-border h-full">
       {/* Brand */}
@@ -57,7 +61,7 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 p-2 space-y-0.5">
-        {navItems.map(({ page, label, icon }) => (
+        {visibleNavItems.map(({ page, label, icon }) => (
           <button
             type="button"
             key={page}

@@ -1,30 +1,46 @@
-# SQLi Combo Defense Console
+# SQLi Combo Security Tool — Attack Activity Download Report
 
 ## Current State
-AttackPage renders cards from `ATTACK_SCENARIOS` array in `data.ts`. Currently 10 attack scenarios: SQLi, XSS, Session Hijack, Rate-Limit Bypass, CSRF, Command Injection, Directory Traversal, MITM, DNS Spoofing, Buffer Overflow.
 
-PreventPage renders collapsible guide cards from `PREVENTION_GUIDES` array in `data.ts`. Currently 6 guides for the newer attack types (CSRF, Command Injection, Directory Traversal, MITM, DNS Spoofing, Buffer Overflow).
+The app already has a `ReportsPage.tsx` (linked to the `reports` nav tab) but it only shows a static security posture snapshot — threat level, prevention coverage, and open alerts. It has no download capability, no date filtering, and no per-attack activity table.
 
-`SCENARIO_META` in `data.ts` maps scenario names to hacker IP, attack type, and reattack loop for popup alerts.
+The `Alert` interface in `types.ts` is missing: `city`, `triggeredBy`, `resolvedBy`, `mlThreatScore`. These fields are needed for the activity report.
+
+The `App.tsx` handles `handleRunReplay` (which generates alerts) and `handleUpdateAlertStatus` (which resolves alerts), but neither captures the user who triggered/resolved or the city.
+
+The `Sidebar.tsx` shows all nav items to all users equally — no role gating on the Reports tab.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Script Injection attack** in `ATTACK_SCENARIOS` -- a distinct attack from XSS, focusing on inline script execution via event handlers and javascript: URIs in DOM contexts, not just `<script>` tags. Severity: high.
-- **Forced Login attack** (credential stuffing / authentication bypass) in `ATTACK_SCENARIOS` -- distinct from Brute Force, uses breached credential databases and account enumeration. Severity: critical.
-- **Scenario metadata** for both new attacks in `SCENARIO_META` (hackerIp, attackType, reattackLoop).
-- **Prevention guide for Script Injection** in `PREVENTION_GUIDES` with attack vector description, 4 mitigation steps, code example, OWASP A03:2021, NIST SP 800-53: SI-10, SI-15 references.
-- **Prevention guide for Forced Login** in `PREVENTION_GUIDES` with attack vector description, 4 mitigation steps, code example, OWASP A07:2021, NIST SP 800-53: AC-2, IA-5 references.
+- Extend `Alert` type with optional fields: `city?: string`, `triggeredBy?: string`, `resolvedBy?: string`, `mlThreatScore?: number`
+- In `App.tsx` `handleRunReplay`: populate `city` (pick random Indian city for auto-attacks; leave blank for manual replays), `triggeredBy` (current user's email), `mlThreatScore` (random 50–99 for critical/high)
+- In `App.tsx` `handleUpdateAlertStatus`: when status becomes `resolved`, update the alert's `resolvedBy` to current user's email
+- Revamp `ReportsPage.tsx` into a full attack activity download report:
+  - Header: "ATTACK ACTIVITY REPORT" with admin-only badge
+  - Date range filter: Start Date + End Date inputs, plus an "APPLY FILTER" button
+  - Summary stats row: Total Events, Open, Resolved, Critical Count
+  - Activity table with columns: Timestamp, Attack Type, Attacker IP, City, Status, Triggered By, Resolved By, ML Threat Score
+  - Status badge color-coded: OPEN (red), INVESTIGATING (yellow), RESOLVED (green)
+  - ML score shown as a colored bar + percentage (red >70%, orange 40–70%, green <40%)
+  - "DOWNLOAD CSV" button: generates and downloads a .csv file of filtered rows
+  - "DOWNLOAD PDF" button: generates a formatted PDF using browser print/canvas (no external library needed — use window.print() with a print-only styled div, OR construct a text blob that looks like a report)
+  - Empty state message when no records match the filter
+- Sidebar: gate the Reports tab so it only shows to users with role `admin` (which includes co-admin since displayRole="CO-ADMIN" but role="admin")
 
 ### Modify
-- Nothing (purely additive)
+- `types.ts`: Add `city?`, `triggeredBy?`, `resolvedBy?`, `mlThreatScore?` to Alert interface
+- `App.tsx`: Update `handleRunReplay` and `handleUpdateAlertStatus` as described
+- `ReportsPage.tsx`: Full replacement with the new attack activity download report UI
+- `Sidebar.tsx`: Filter navItems so `reports` tab only renders when `user.role === 'admin'`
 
 ### Remove
-- Nothing
+- The old static security posture summary content from `ReportsPage.tsx` (replace entirely — nothing from the old reports page needs to be kept)
 
 ## Implementation Plan
-1. Add two new `AttackScenario` objects to `ATTACK_SCENARIOS` in `src/frontend/src/data.ts`.
-2. Add two new entries to `SCENARIO_META` in `data.ts`.
-3. Add two new `PreventionGuide` objects to `PREVENTION_GUIDES` in `data.ts`.
-4. No page file changes needed -- both arrays are already wired up to render cards automatically.
-5. Run lint + typecheck + build to verify no regressions.
+
+1. Update `src/frontend/src/types.ts` — extend Alert interface with city, triggeredBy, resolvedBy, mlThreatScore
+2. Update `src/frontend/src/App.tsx` — populate new Alert fields in handleRunReplay, capture resolvedBy in handleUpdateAlertStatus
+3. Replace `src/frontend/src/pages/ReportsPage.tsx` — new full attack activity download report with date filter, table, CSV download, PDF download
+4. Update `src/frontend/src/components/Sidebar.tsx` — hide Reports nav item for non-admin users
+5. Validate (lint, typecheck, build)

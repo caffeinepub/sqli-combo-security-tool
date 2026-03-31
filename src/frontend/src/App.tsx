@@ -6,6 +6,7 @@ import AnalystDefendedNotification from "./components/AnalystDefendedNotificatio
 import AttackAlertPopup from "./components/AttackAlertPopup";
 import Sidebar from "./components/Sidebar";
 import {
+  INDIAN_CITIES,
   INITIAL_ACTIVITY,
   INITIAL_ALERTS,
   INITIAL_PREVENTION_TASKS,
@@ -163,6 +164,8 @@ export default function App() {
   const handleRunReplay = useCallback(
     (scenarioName: string, scenarioId: string) => {
       const meta = getScenarioMeta(scenarioName);
+      const randomCity =
+        INDIAN_CITIES[Math.floor(Math.random() * INDIAN_CITIES.length)];
       const newAlert: Alert = {
         id: `alert-${Date.now()}`,
         scenarioName,
@@ -173,6 +176,9 @@ export default function App() {
         hackerIp: meta.hackerIp,
         attackType: meta.attackType,
         reattackLoop: meta.reattackLoop,
+        city: randomCity,
+        triggeredBy: user?.email ?? "system",
+        mlThreatScore: Math.floor(Math.random() * 40) + 60,
       };
       setAlerts((prev) => [newAlert, ...prev]);
       setThreatTrend((prev) => {
@@ -212,9 +218,19 @@ export default function App() {
 
   const handleUpdateAlertStatus = useCallback(
     (alertId: string, status: AlertStatus) => {
-      setAlerts((prev) =>
-        prev.map((a) => (a.id === alertId ? { ...a, status } : a)),
-      );
+      if (status === "resolved") {
+        setAlerts((prev) =>
+          prev.map((a) =>
+            a.id === alertId
+              ? { ...a, status, resolvedBy: user?.email ?? "system" }
+              : a,
+          ),
+        );
+      } else {
+        setAlerts((prev) =>
+          prev.map((a) => (a.id === alertId ? { ...a, status } : a)),
+        );
+      }
       addActivity(
         `Alert ${alertId} status updated to ${status.toUpperCase()}`,
         user?.email ?? "system",
