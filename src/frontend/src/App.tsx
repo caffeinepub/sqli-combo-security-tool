@@ -15,8 +15,10 @@ import {
 } from "./data";
 import ActivityPage from "./pages/ActivityPage";
 import AttackPage from "./pages/AttackPage";
+import AttackTimelinePage from "./pages/AttackTimelinePage";
 import DashboardPage from "./pages/DashboardPage";
 import DetectPage from "./pages/DetectPage";
+import LiveAttackMapPage from "./pages/LiveAttackMapPage";
 import LoginPage from "./pages/LoginPage";
 import PreventPage from "./pages/PreventPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -28,6 +30,7 @@ import type {
   ActivityEntry,
   Alert,
   AlertStatus,
+  AttackEvent,
   Page,
   PreventionTask,
   ScannerEvent,
@@ -64,6 +67,21 @@ export default function App() {
   } | null>(null);
   const [scannerEvents, setScannerEvents] = useState<ScannerEvent[]>([]);
   const [attackMode, setAttackMode] = useState<"auto" | "manual">("auto");
+  const [attackEvents, setAttackEvents] = useState<AttackEvent[]>([]);
+
+  const addAttackEvent = useCallback(
+    (event: Omit<AttackEvent, "id" | "timestamp">) => {
+      setAttackEvents((prev) => [
+        ...prev,
+        {
+          ...event,
+          id: `ae-${Date.now()}-${Math.random()}`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    },
+    [],
+  );
 
   const addActivity = useCallback((action: string, actor: string) => {
     setActivity((prev) => [
@@ -198,6 +216,14 @@ export default function App() {
           status: "FLAGGED",
         },
       ]);
+      addAttackEvent({
+        name: scenarioName,
+        severity: scenarioId === "sqli" ? "critical" : "high",
+        city: meta.hackerIp ? "Mumbai" : "Delhi",
+        attackerIp: meta.hackerIp ?? "192.168.1.1",
+        attackType: meta.attackType ?? scenarioName,
+        source: "replay",
+      });
       if (user?.role === "admin") {
         setAttackPopup({
           name: scenarioName,
@@ -207,7 +233,7 @@ export default function App() {
       }
       toast.error(`Attack replay: ${scenarioName}`, { duration: 3000 });
     },
-    [user, addActivity],
+    [user, addActivity, addAttackEvent],
   );
 
   const handleUpdateAlertStatus = useCallback(
@@ -255,7 +281,15 @@ export default function App() {
       `Manual alert: ${autoAttack.name} from ${autoAttack.city}, India (${autoAttack.attackerIp})`,
       "SYSTEM",
     );
-  }, [addActivity]);
+    addAttackEvent({
+      name: autoAttack.name,
+      severity: autoAttack.severity,
+      city: autoAttack.city,
+      attackerIp: autoAttack.attackerIp,
+      attackType: autoAttack.name,
+      source: "manual",
+    });
+  }, [addActivity, addAttackEvent]);
 
   // ── Auto-attack timer (every 90 seconds) ── only fires in auto mode
   useEffect(() => {
@@ -267,9 +301,17 @@ export default function App() {
         `Auto-alert: ${autoAttack.name} from ${autoAttack.city}, India (${autoAttack.attackerIp})`,
         "SYSTEM",
       );
+      addAttackEvent({
+        name: autoAttack.name,
+        severity: autoAttack.severity,
+        city: autoAttack.city,
+        attackerIp: autoAttack.attackerIp,
+        attackType: autoAttack.name,
+        source: "auto",
+      });
     }, 90000);
     return () => clearInterval(interval);
-  }, [user, page, addActivity, attackMode]);
+  }, [user, page, addActivity, addAttackEvent, attackMode]);
 
   const threatLevel = Math.min(
     100,
@@ -386,6 +428,10 @@ export default function App() {
         );
       case "activity":
         return <ActivityPage activity={activity} />;
+      case "timeline":
+        return <AttackTimelinePage events={attackEvents} />;
+      case "map":
+        return <LiveAttackMapPage events={attackEvents} />;
       default:
         return null;
     }

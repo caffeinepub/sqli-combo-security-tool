@@ -6,7 +6,9 @@ export type Page =
   | "prevent"
   | "reports"
   | "activity"
-  | "users";
+  | "users"
+  | "timeline"
+  | "map";
 
 export type Role =
   | "admin"
@@ -86,4 +88,15 @@ export interface ExtendedUser {
   attacksTriggered: number;
   alertsResolved: number;
   activityLog: { timestamp: string; action: string }[];
+}
+
+export interface AttackEvent {
+  id: string;
+  timestamp: string;
+  name: string;
+  severity: string;
+  city: string;
+  attackerIp: string;
+  attackType: string;
+  source: "auto" | "manual" | "replay";
 }

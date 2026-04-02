@@ -2,6 +2,8 @@ import {
   Activity,
   Crosshair,
   FileText,
+  Globe,
+  History,
   LayoutDashboard,
   LogOut,
   Shield,
@@ -28,6 +30,8 @@ const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
   { page: "detect", label: "DETECT", icon: <Shield size={16} /> },
   { page: "prevent", label: "PREVENT", icon: <ShieldCheck size={16} /> },
   { page: "reports", label: "REPORTS", icon: <FileText size={16} /> },
+  { page: "timeline", label: "TIMELINE", icon: <History size={16} /> },
+  { page: "map", label: "LIVE MAP", icon: <Globe size={16} /> },
   { page: "activity", label: "ACTIVITY", icon: <Activity size={16} /> },
 ];
 
@@ -56,7 +60,7 @@ export default function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-2 space-y-0.5">
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {navItems.map(({ page, label, icon }) => (
           <button
             type="button"
