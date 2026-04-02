@@ -1,52 +1,28 @@
-# SQLi Combo Security Tool — WAF Attack Simulation Animation
+# SQLi Combo Security Tool
 
 ## Current State
-
-The WAF tab (`WafPage.tsx`) is a full-featured firewall management page with:
-- Master ON/OFF firewall toggle
-- 10 WAF rules with enable/disable toggles and hit counts
-- Blocked requests log
-- Blocked IP management panel
-- Security posture summary stats (bottom)
-
-No animation or simulation panel exists in the WAF tab yet.
+The Live Attack Map page (`src/frontend/src/pages/LiveAttackMapPage.tsx`) renders a 3D globe using Three.js/React Three Fiber. The globe is a procedural sphere with a canvas texture that has very vague landmass hints and grid lines. Attack events appear as glowing dots at accurate lat/lon positions for 30 Indian cities. There is no India country boundary, no country label, and no city name labels visible on the globe itself.
 
 ## Requested Changes (Diff)
 
 ### Add
-- A new **"VIEW ATTACK SIMULATION"** button at the top of the WafPage (prominent, cyberpunk-styled, glowing cyan/green)
-- A new **`WafSimulationModal`** component (full-screen overlay/modal) that opens when the button is clicked
-- The modal contains a **3-phase animated visual scene** that auto-loops through steps:
-  - **Phase 1 — Direct Attack**: Attacker browser window fires animated attack packets (flying red/orange projectiles with labels like `SQL INJECTION`, `XSS`, `PAYLOAD`) toward the Main Site browser window. The main site shows stress/damage indicators.
-  - **Phase 2 — WAF Intercepts**: A glowing WAF Shield appears between the attacker and the main site. Attack packets hit the shield and are deflected/blocked. The shield shows block animations. A new Clone Site browser window materializes (green, slightly transparent, labeled "HONEYPOT / CLONE SITE").
-  - **Phase 3 — Bypass to Clone**: The WAF redirects the attacker silently toward the Clone site. Attack packets now fly toward the clone. The clone shows fake "success" indicators while the main site shows "PROTECTED / SECURE". Final banner: "ATTACKER TRAPPED IN CLONE — MAIN SITE SECURED".
-- Each phase has:
-  - A phase indicator bar (Phase 1 / 2 / 3 with progress dots)
-  - Phase label and description text below the animation canvas
-  - A "NEXT STEP" button to advance manually AND auto-advance every ~3.5 seconds when looping
-  - The loop restarts from Phase 1 after Phase 3 completes
-- Visual style: dark background with matrix green code rain in background, neon glowing elements (cyan, green, red, orange), cyberpunk browser window chrome, animated SVG/CSS packets
-- A close button (X) in the top-right to dismiss the modal
+- **India country boundary** drawn on the globe surface as a glowing green outline polygon (approximate SVG/GeoJSON-based boundary path projected onto the sphere). The boundary should be a visible outline that clearly delineates India on the globe.
+- **"INDIA" country label** rendered at the center of India on the globe (approximately lat 20, lon 80) as a 3D text or HTML overlay positioned at the correct sphere position.
+- **City name labels** for all 30 cities in `CITY_COORDS` rendered as small text labels next to each city dot — visible on the globe surface. Labels should only appear for cities that have attack events OR as a persistent layer showing all Indian city names.
+- City labels should be compact (9-10px font mono, cyber-cyan color) and not overlap each other badly. They should appear as floating text near each city's lat/lon position on the globe.
 
 ### Modify
-- `WafPage.tsx`: Add the "VIEW ATTACK SIMULATION" button near the top header section, and import/render the new modal with open/close state
+- `GlobeMesh` canvas texture: enhance the India region to be more visually distinct — a slightly brighter blue-green tinted landmass area in the South Asia region (roughly lon 68–98, lat 8–37).
+- The globe's procedural texture should more clearly show India as a distinct territory.
+- Attack dots should remain on top of/consistent with the new boundary and labels.
 
 ### Remove
-- Nothing removed
+- Nothing removed.
 
 ## Implementation Plan
-
-1. Create `src/frontend/src/components/WafSimulationModal.tsx`:
-   - Full-screen dark overlay modal with close button
-   - Canvas area with three animated "browser window" boxes: Attacker (red), Main Site (blue/white), Clone Site (green)
-   - Animated flying packets using CSS keyframe animations (translate + fade)
-   - WAF Shield SVG element that appears in Phase 2+
-   - Phase state machine: currentPhase (1|2|3), auto-advance timer, manual NEXT button
-   - Matrix code rain as canvas background
-   - Phase description text area with typewriter effect
-   - Auto-loop: after Phase 3 → pause 1.5s → reset to Phase 1
-
-2. Update `WafPage.tsx`:
-   - Add `useState` for `showSimulation` boolean
-   - Add "VIEW ATTACK SIMULATION" button at top of page (below the header/toggle bar)
-   - Import and render `<WafSimulationModal>` with open/close handler
+1. Add an `IndiaOutline` Three.js component that draws India's approximate boundary as a `THREE.Line` or `THREE.LineLoop` on the globe surface using lat/lon projected to 3D. Use ~20-30 key border points approximating India's coastline and land border.
+2. Add an `IndiaLabel` component using `<Html>` from `@react-three/drei` positioned at lat 20, lon 78 (center of India) showing "INDIA" in a glowing green cyberpunk font.
+3. Add a `CityLabel` component using `<Html>` from `@react-three/drei` for each city in `CITY_COORDS`, rendering the city name as a small floating label positioned at that city's 3D sphere position. Show all 30 cities always (not just cities with events).
+4. Update `GlobeMesh` canvas texture to paint a more visible India-region tinted area.
+5. Integrate `IndiaOutline`, `IndiaLabel`, and city labels into `GlobeScene`.
+6. Ensure labels/HTML overlays have `pointerEvents: none` to not interfere with OrbitControls interaction.

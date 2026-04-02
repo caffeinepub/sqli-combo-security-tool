@@ -126,6 +126,7 @@ ${recommendations.map((r) => `• ${r}`).join("\n")}`;
       triggeredBy: "admin",
       resolvedBy: a.status === "resolved" ? "analyst" : "-",
       mlScore: `${getMlScore(a.id, a.severity)}%`,
+      severity: a.severity,
     }));
 
   const downloadCsv = () => {
@@ -150,27 +151,314 @@ ${recommendations.map((r) => `• ${r}`).join("\n")}`;
 
   const downloadPdf = () => {
     const rows = buildRows(filteredAlerts);
+    const now = new Date();
     const dateRange =
       fromDate || toDate
-        ? `Date Range: ${fromDate || "Start"} to ${toDate || "Now"}`
-        : "Date Range: All records";
-    const sep = "-".repeat(80);
-    const header = `COMBO DEFENSE CONSOLE — ATTACK ACTIVITY REPORT\n${dateRange}\nGenerated: ${new Date().toLocaleString()}\n${sep}\n`;
-    const colHeader = `TIMESTAMP | ATTACK TYPE | ATTACKER IP | CITY | STATUS | TRIGGERED BY | RESOLVED BY | ML SCORE\n${sep}\n`;
-    const body = rows
+        ? `${fromDate || "Start"} to ${toDate || "Now"}`
+        : "All Records";
+
+    const criticalRows = rows.filter((r) => r.severity === "critical").length;
+    const highRows = rows.filter((r) => r.severity === "high").length;
+    const mediumRows = rows.filter((r) => r.severity === "medium").length;
+    const lowRows = rows.filter((r) => r.severity === "low").length;
+    const resolvedRows = rows.filter((r) => r.status === "RESOLVED").length;
+    const openRows = rows.filter((r) => r.status === "OPEN").length;
+
+    const recRows = [
+      "Complete all pending prevention hardening tasks",
+      `Investigate ${openRows} open alert(s) immediately`,
+      `Prioritize ${criticalRows} critical and ${highRows} high severity findings`,
+      "Run safe replays to validate detection coverage",
+      "Review WAF rules and update to latest OWASP threat vectors",
+      "Enable IP blocking for repeat attackers via the WAF module",
+      "Ensure TF-IDF + XGBoost model scores are reviewed per alert",
+    ];
+
+    const tableRows = rows
       .map(
-        (r) =>
-          `${r.timestamp} | ${r.attackType} | ${r.ip} | ${r.city} | ${r.status} | ${r.triggeredBy} | ${r.resolvedBy} | ${r.mlScore}`,
+        (r, i) => `
+        <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
+          <td>${i + 1}</td>
+          <td>${r.timestamp}</td>
+          <td>${r.attackType}</td>
+          <td>${r.ip}</td>
+          <td>${r.city}</td>
+          <td class="status-${r.status.toLowerCase()}">${r.status}</td>
+          <td class="ml-score">${r.mlScore}</td>
+        </tr>`,
       )
-      .join("\n");
-    const blob = new Blob([header + colHeader + body], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `combo-defense-report-${Date.now()}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Report downloaded.");
+      .join("");
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Combo Defense Console — Attack Activity Report</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    color: #00ff99;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    padding: 32px;
+    line-height: 1.5;
+  }
+  .cover {
+    text-align: center;
+    margin-bottom: 40px;
+    padding: 30px;
+    border: 2px solid #00ff99;
+    border-radius: 4px;
+    background: #001a0d;
+  }
+  .cover h1 {
+    font-size: 22px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: #00ff99;
+    text-shadow: 0 0 12px #00ff99;
+    margin-bottom: 6px;
+  }
+  .cover h2 {
+    font-size: 14px;
+    letter-spacing: 4px;
+    color: #00ccff;
+    text-shadow: 0 0 8px #00ccff;
+    margin-bottom: 16px;
+  }
+  .cover .meta {
+    color: #669988;
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+  .divider {
+    color: #003322;
+    font-size: 10px;
+    margin: 16px 0;
+    letter-spacing: 1px;
+  }
+  .section-title {
+    font-size: 13px;
+    letter-spacing: 4px;
+    color: #00ccff;
+    text-transform: uppercase;
+    border-bottom: 1px solid #00ccff33;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+    margin-top: 28px;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .summary-card {
+    background: #001a0d;
+    border: 1px solid #00ff9933;
+    border-radius: 3px;
+    padding: 10px 14px;
+  }
+  .summary-card .label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: #669988;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .summary-card .value {
+    font-size: 20px;
+    font-weight: bold;
+  }
+  .value-critical { color: #ef4444; text-shadow: 0 0 6px #ef444466; }
+  .value-high { color: #f97316; text-shadow: 0 0 6px #f9731666; }
+  .value-medium { color: #eab308; text-shadow: 0 0 6px #eab30866; }
+  .value-low { color: #22c55e; text-shadow: 0 0 6px #22c55e66; }
+  .value-cyan { color: #00ccff; text-shadow: 0 0 6px #00ccff66; }
+  .value-green { color: #00ff99; text-shadow: 0 0 6px #00ff9966; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 10px;
+  }
+  thead tr {
+    background: #001a0d;
+    border-bottom: 2px solid #00ff9933;
+  }
+  th {
+    text-align: left;
+    padding: 8px 10px;
+    letter-spacing: 2px;
+    color: #00ccff;
+    font-size: 9px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .row-even { background: #00060300; }
+  .row-odd { background: #00110800; }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #00331122;
+    color: #99ddbb;
+    white-space: nowrap;
+  }
+  .status-open { color: #ef4444; }
+  .status-resolved { color: #22c55e; }
+  .status-investigating { color: #f97316; }
+  .ml-score { color: #00ccff; }
+  .rec-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .rec-list li {
+    padding: 5px 0;
+    border-bottom: 1px solid #00331133;
+    color: #99ddbb;
+  }
+  .rec-list li::before {
+    content: '▸  ';
+    color: #00ff99;
+  }
+  .footer {
+    margin-top: 40px;
+    text-align: center;
+    color: #336655;
+    font-size: 9px;
+    letter-spacing: 2px;
+    border-top: 1px solid #003322;
+    padding-top: 12px;
+  }
+  @media print {
+    body { background: #000 !important; color: #00ff99 !important; }
+    .cover { break-after: page; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>COMBO DEFENSE CONSOLE</h1>
+  <h2>ATTACK ACTIVITY REPORT</h2>
+  <div class="meta">
+    <div>GENERATED: ${now.toLocaleString()}</div>
+    <div>DATE RANGE: ${dateRange}</div>
+    <div>REPORT BY: Combo Defense Console v32 — Cybersecurity Training Platform</div>
+  </div>
+</div>
+
+<div class="divider">═══════════════════════════════════════════════════════════════════════════════</div>
+
+<div class="section-title">EXECUTIVE SUMMARY</div>
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="label">Total Events</div>
+    <div class="value value-cyan">${rows.length}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Critical</div>
+    <div class="value value-critical">${criticalRows}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">High</div>
+    <div class="value value-high">${highRows}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Medium</div>
+    <div class="value value-medium">${mediumRows}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Low</div>
+    <div class="value value-low">${lowRows}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Open Alerts</div>
+    <div class="value value-critical">${openRows}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Resolved</div>
+    <div class="value value-green">${resolvedRows}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Threat Level</div>
+    <div class="value value-high">${threatLevel}%</div>
+  </div>
+</div>
+
+<div class="divider">═══════════════════════════════════════════════════════════════════════════════</div>
+
+<div class="section-title">ATTACK FINDINGS</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Timestamp</th>
+      <th>Attack Type</th>
+      <th>Attacker IP</th>
+      <th>City</th>
+      <th>Status</th>
+      <th>ML Score</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tableRows || "<tr><td colspan='7' style='text-align:center;color:#336655;padding:20px;'>NO RECORDS FOUND</td></tr>"}
+  </tbody>
+</table>
+
+<div class="divider">═══════════════════════════════════════════════════════════════════════════════</div>
+
+<div class="section-title">RECOMMENDATIONS</div>
+<ul class="rec-list">
+  ${recRows.map((r) => `<li>${r}</li>`).join("")}
+</ul>
+
+<div class="footer">
+  GENERATED BY COMBO DEFENSE CONSOLE SECURITY PLATFORM &nbsp;|&nbsp; CONFIDENTIAL — FOR AUTHORIZED USE ONLY
+</div>
+
+</body>
+</html>`;
+
+    // Use print-in-iframe approach to save as PDF
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.top = "-9999px";
+    iframe.style.left = "-9999px";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.style.opacity = "0";
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      toast.error("Failed to generate PDF.");
+      return;
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(htmlContent);
+    iframeDoc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (_e) {
+        // ignore
+      }
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
+    }, 500);
+
+    toast.success("PDF report opened in print dialog — save as PDF.");
   };
 
   const previewRows = buildRows(filteredAlerts).slice(0, 8);

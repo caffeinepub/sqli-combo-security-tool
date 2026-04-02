@@ -1,3 +1,5 @@
+import { Html, OrbitControls } from "@react-three/drei";
+import { Canvas, useFrame } from "@react-three/fiber";
 import {
   AlertTriangle,
   Globe,
@@ -6,7 +8,8 @@ import {
   Shield,
   Wifi,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useRef, useState } from "react";
+import * as THREE from "three";
 import type { AttackEvent, BlockedIp } from "../types";
 
 interface LiveAttackMapPageProps {
@@ -49,6 +52,62 @@ const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
   Thiruvananthapuram: { lat: 8.524, lon: 76.936 },
 };
 
+const INDIA_BORDER: [number, number][] = [
+  [37.1, 75.0],
+  [35.5, 77.5],
+  [34.5, 78.5],
+  [32.0, 79.5],
+  [30.5, 80.3],
+  [29.5, 81.0],
+  [28.5, 81.5],
+  [27.5, 84.0],
+  [27.3, 87.0],
+  [26.5, 88.0],
+  [26.0, 89.5],
+  [25.0, 90.5],
+  [24.5, 91.5],
+  [23.5, 92.5],
+  [22.0, 93.5],
+  [21.5, 92.0],
+  [20.5, 92.5],
+  [21.3, 91.5],
+  [22.5, 91.0],
+  [22.0, 89.0],
+  [21.0, 87.0],
+  [20.0, 86.0],
+  [18.0, 84.0],
+  [16.0, 82.0],
+  [14.0, 80.0],
+  [13.0, 80.3],
+  [11.0, 79.8],
+  [8.5, 77.5],
+  [8.0, 77.5],
+  [9.0, 76.5],
+  [10.5, 76.2],
+  [11.5, 75.0],
+  [14.0, 74.0],
+  [15.5, 73.5],
+  [17.0, 73.0],
+  [18.0, 72.8],
+  [20.0, 72.5],
+  [21.5, 72.5],
+  [22.5, 68.5],
+  [23.5, 68.0],
+  [24.5, 68.5],
+  [25.0, 70.0],
+  [26.5, 70.5],
+  [27.5, 70.0],
+  [28.5, 70.5],
+  [30.0, 71.0],
+  [31.5, 74.0],
+  [32.5, 74.5],
+  [33.5, 75.0],
+  [34.5, 76.0],
+  [35.5, 76.5],
+  [36.5, 75.5],
+  [37.1, 75.0],
+];
+
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "#ef4444",
   high: "#f97316",
@@ -64,37 +123,364 @@ function formatTime(ts: string) {
   });
 }
 
-// Load leaflet CSS dynamically
-function ensureLeafletCss() {
-  if (document.getElementById("leaflet-css")) return;
-  const link = document.createElement("link");
-  link.id = "leaflet-css";
-  link.rel = "stylesheet";
-  link.href =
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-  document.head.appendChild(link);
+// Convert lat/lon to 3D sphere coordinates
+function latLonToVec3(
+  lat: number,
+  lon: number,
+  radius: number,
+): [number, number, number] {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  const x = -(radius * Math.sin(phi) * Math.cos(theta));
+  const y = radius * Math.cos(phi);
+  const z = radius * Math.sin(phi) * Math.sin(theta);
+  return [x, y, z];
 }
 
-// Load leaflet JS dynamically
-function loadLeaflet(): Promise<typeof window.L> {
-  return new Promise((resolve, reject) => {
-    if (window.L) {
-      resolve(window.L);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src =
-      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-    script.onload = () => resolve(window.L);
-    script.onerror = reject;
-    document.head.appendChild(script);
+// India country boundary outline drawn as a LineLoop on the globe surface
+function IndiaOutline() {
+  const points = INDIA_BORDER.map(([lat, lon]) => {
+    const [x, y, z] = latLonToVec3(lat, lon, 1.015);
+    return new THREE.Vector3(x, y, z);
   });
+
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+  return (
+    // @ts-ignore - Three.js primitive via R3F
+    <line geometry={geometry}>
+      <lineBasicMaterial
+        attach="material"
+        color="#00ffcc"
+        transparent
+        opacity={0.75}
+      />
+    </line>
+  );
 }
 
-declare global {
-  interface Window {
-    L: any;
+// "INDIA" country label centered at lat 22, lon 80
+function IndiaLabel() {
+  const [x, y, z] = latLonToVec3(22, 80, 1.04);
+  return (
+    <Html
+      position={[x, y, z]}
+      style={{ pointerEvents: "none" }}
+      center
+      zIndexRange={[0, 0]}
+    >
+      <div
+        style={{
+          color: "#00ffcc",
+          fontFamily: "monospace",
+          fontSize: "12px",
+          fontWeight: "bold",
+          letterSpacing: "4px",
+          textShadow: "0 0 8px #00ffcc, 0 0 20px #00ffcc88, 0 0 40px #00ffcc44",
+          whiteSpace: "nowrap",
+          opacity: 0.95,
+          userSelect: "none",
+        }}
+      >
+        INDIA
+      </div>
+    </Html>
+  );
+}
+
+// City name labels for all 30 cities in CITY_COORDS
+function CityLabels() {
+  return (
+    <>
+      {Object.entries(CITY_COORDS).map(([city, { lat, lon }]) => {
+        const [x, y, z] = latLonToVec3(lat, lon, 1.045);
+        return (
+          <Html
+            key={city}
+            position={[x, y, z]}
+            style={{ pointerEvents: "none" }}
+            center
+            zIndexRange={[0, 0]}
+          >
+            <div
+              style={{
+                color: "#aaffee",
+                fontFamily: "monospace",
+                fontSize: "7px",
+                letterSpacing: "0.5px",
+                textShadow: "0 0 4px #00ffcc99, 0 0 8px #00ffcc44",
+                whiteSpace: "nowrap",
+                opacity: 0.8,
+                userSelect: "none",
+                marginLeft: "6px",
+              }}
+            >
+              {city}
+            </div>
+          </Html>
+        );
+      })}
+    </>
+  );
+}
+
+// Stars background
+function Stars() {
+  const ref = useRef<THREE.Points>(null);
+  const positions = new Float32Array(3000);
+  for (let i = 0; i < 3000; i++) {
+    positions[i] = (Math.random() - 0.5) * 100;
   }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+  useFrame(() => {
+    if (ref.current) {
+      ref.current.rotation.y += 0.00005;
+    }
+  });
+
+  return (
+    <points ref={ref} geometry={geometry}>
+      <pointsMaterial
+        color="#88ffdd"
+        size={0.12}
+        sizeAttenuation
+        transparent
+        opacity={0.6}
+      />
+    </points>
+  );
+}
+
+// Atmosphere glow
+function Atmosphere() {
+  return (
+    <mesh>
+      <sphereGeometry args={[1.08, 64, 64]} />
+      <meshBasicMaterial
+        color="#00ffcc"
+        transparent
+        opacity={0.04}
+        side={THREE.BackSide}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
+// Wireframe grid overlay
+function GlobeGrid() {
+  return (
+    <mesh>
+      <sphereGeometry args={[1.01, 24, 24]} />
+      <meshBasicMaterial
+        color="#00ffcc"
+        wireframe
+        transparent
+        opacity={0.08}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
+// Attack dot with pulse ring
+function AttackDot({
+  event,
+  isRecent,
+  onClick,
+}: {
+  event: AttackEvent;
+  isRecent: boolean;
+  onClick: () => void;
+}) {
+  const ringRef = useRef<THREE.Mesh>(null);
+  const coords = CITY_COORDS[event.city] ?? { lat: 20.5, lon: 79 };
+  const [x, y, z] = latLonToVec3(coords.lat, coords.lon, 1.02);
+  const color = SEVERITY_COLORS[event.severity] ?? "#888888";
+
+  useFrame(({ clock }) => {
+    if (ringRef.current && isRecent) {
+      const t = (clock.getElapsedTime() * 1.5) % 1;
+      ringRef.current.scale.setScalar(1 + t * 2.5);
+      const mat = ringRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = (1 - t) * 0.8;
+    }
+  });
+
+  const dotSize =
+    event.severity === "critical"
+      ? 0.022
+      : event.severity === "high"
+        ? 0.018
+        : 0.014;
+
+  return (
+    <group position={[x, y, z]}>
+      {/* Core dot */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: Three.js mesh is not a DOM element */}
+      <mesh onClick={onClick}>
+        <sphereGeometry args={[dotSize, 8, 8]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+      {/* Glow halo */}
+      <mesh>
+        <sphereGeometry args={[dotSize * 2, 8, 8]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.25}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Pulse ring for recent events */}
+      {isRecent && (
+        <mesh ref={ringRef}>
+          <ringGeometry args={[dotSize * 1.5, dotSize * 2.5, 16]} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={0.6}
+            side={THREE.DoubleSide}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+// Main globe mesh with India highlighted
+function GlobeMesh() {
+  const globeRef = useRef<THREE.Mesh>(null);
+
+  // Create procedural texture with India highlighted
+  const texture = (() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // Deep space background
+    ctx.fillStyle = "#010d1a";
+    ctx.fillRect(0, 0, 512, 256);
+
+    // Very subtle land mass hints
+    ctx.fillStyle = "rgba(0, 40, 60, 0.5)";
+    // Europe/Asia region
+    ctx.fillRect(230, 50, 130, 90);
+    // Africa
+    ctx.fillRect(230, 110, 50, 80);
+    // Americas
+    ctx.fillRect(60, 40, 90, 120);
+    // Australia
+    ctx.fillRect(360, 120, 60, 50);
+
+    // India highlighted region (lon 68-98, lat 8-37)
+    // lon->x: (lon+180)/360*512, lat->y: (90-lat)/180*256
+    // India x: ~353 to ~395, India y: ~75 to ~116
+    ctx.fillStyle = "rgba(0, 80, 80, 0.45)";
+    ctx.fillRect(353, 75, 42, 41);
+
+    // Subtle India highlight border glow
+    ctx.strokeStyle = "rgba(0, 255, 200, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(353, 75, 42, 41);
+
+    // Grid lines
+    ctx.strokeStyle = "rgba(0,255,200,0.06)";
+    ctx.lineWidth = 0.5;
+    // Latitude lines
+    for (let i = 0; i <= 8; i++) {
+      const y = (i / 8) * 256;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
+    // Longitude lines
+    for (let i = 0; i <= 16; i++) {
+      const x = (i / 16) * 512;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 256);
+      ctx.stroke();
+    }
+
+    return new THREE.CanvasTexture(canvas);
+  })();
+
+  useFrame((_state, delta) => {
+    if (globeRef.current) {
+      globeRef.current.rotation.y += delta * 0.08;
+    }
+  });
+
+  return (
+    <mesh ref={globeRef}>
+      <sphereGeometry args={[1, 64, 64]} />
+      <meshPhongMaterial
+        map={texture ?? undefined}
+        color="#012030"
+        emissive="#001520"
+        emissiveIntensity={0.3}
+        shininess={20}
+        specular={new THREE.Color("#00ffcc")}
+      />
+    </mesh>
+  );
+}
+
+// Full globe scene
+function GlobeScene({
+  events,
+  recentIds,
+  onSelectEvent,
+}: {
+  events: AttackEvent[];
+  recentIds: Set<string>;
+  onSelectEvent: (e: AttackEvent) => void;
+}) {
+  return (
+    <>
+      <ambientLight intensity={0.15} />
+      <pointLight position={[5, 5, 5]} intensity={0.6} color="#ffffff" />
+      <pointLight position={[-5, -3, -5]} intensity={0.2} color="#00ffcc" />
+
+      <Stars />
+      <GlobeMesh />
+      <GlobeGrid />
+      <Atmosphere />
+
+      <IndiaOutline />
+      <IndiaLabel />
+      <CityLabels />
+
+      {events.map((event) => (
+        <AttackDot
+          key={event.id}
+          event={event}
+          isRecent={recentIds.has(event.id)}
+          onClick={() => onSelectEvent(event)}
+        />
+      ))}
+
+      <OrbitControls
+        enableZoom
+        enablePan={false}
+        minDistance={1.5}
+        maxDistance={4}
+        autoRotate={false}
+        rotateSpeed={0.5}
+        zoomSpeed={0.8}
+      />
+    </>
+  );
 }
 
 export default function LiveAttackMapPage({
@@ -103,104 +489,7 @@ export default function LiveAttackMapPage({
   onBlockIp,
   currentUser,
 }: LiveAttackMapPageProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<any>(null);
-  const markersRef = useRef<Map<string, any>>(new Map());
   const [selectedEvent, setSelectedEvent] = useState<AttackEvent | null>(null);
-  const [leafletReady, setLeafletReady] = useState(false);
-
-  // Load Leaflet from CDN
-  useEffect(() => {
-    ensureLeafletCss();
-    loadLeaflet()
-      .then(() => setLeafletReady(true))
-      .catch(() => console.error("Failed to load Leaflet"));
-  }, []);
-
-  // Initialize Leaflet map
-  useEffect(() => {
-    if (!leafletReady || !mapRef.current || leafletMapRef.current) return;
-    const L = window.L;
-
-    const map = L.map(mapRef.current, {
-      center: [20.5, 79],
-      zoom: 5,
-      zoomControl: true,
-      attributionControl: true,
-    });
-
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-        subdomains: "abcd",
-        maxZoom: 19,
-      },
-    ).addTo(map);
-
-    const attrEl = map
-      .getContainer()
-      .querySelector(".leaflet-control-attribution");
-    if (attrEl) {
-      attrEl.style.background = "rgba(0,0,0,0.7)";
-      attrEl.style.color = "rgba(0,255,200,0.4)";
-      attrEl.style.fontSize = "8px";
-    }
-
-    leafletMapRef.current = map;
-
-    return () => {
-      map.remove();
-      leafletMapRef.current = null;
-      markersRef.current.clear();
-    };
-  }, [leafletReady]);
-
-  // Sync events to markers
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !leafletReady) return;
-    const L = window.L;
-
-    for (const event of events) {
-      if (markersRef.current.has(event.id)) continue;
-
-      const coords = CITY_COORDS[event.city] ?? { lat: 20.5, lon: 79 };
-      const color = SEVERITY_COLORS[event.severity] ?? "#888";
-      const isBlocked = blockedIps.some((b) => b.ip === event.attackerIp);
-
-      const marker = L.circleMarker([coords.lat, coords.lon], {
-        radius:
-          event.severity === "critical"
-            ? 10
-            : event.severity === "high"
-              ? 8
-              : 6,
-        fillColor: color,
-        color: isBlocked ? "#22c55e" : color,
-        weight: isBlocked ? 2 : 1.5,
-        opacity: 0.9,
-        fillOpacity: 0.7,
-      });
-
-      marker.bindPopup(
-        `<div style="font-family:monospace;background:#0a0f0a;border:1px solid rgba(0,255,200,0.3);padding:12px;border-radius:6px;min-width:200px;">
-          <div style="color:${color};font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">${event.severity} \u2014 ${event.attackType}</div>
-          <div style="color:#e2e8f0;font-size:12px;font-weight:bold;margin-bottom:4px;">${event.name}</div>
-          <div style="color:#94a3b8;font-size:10px;">\uD83D\uDCCD ${event.city}, India</div>
-          <div style="color:#94a3b8;font-size:10px;">\uD83D\uDDA5 ${event.attackerIp}</div>
-          <div style="color:#64748b;font-size:9px;margin-top:4px;">${formatTime(event.timestamp)}</div>
-          ${isBlocked ? '<div style="color:#22c55e;font-size:9px;margin-top:4px;font-weight:bold;">\u2713 IP BLOCKED</div>' : ""}
-        </div>`,
-        { className: "leaflet-cyber-popup" },
-      );
-
-      marker.on("click", () => setSelectedEvent(event));
-      marker.addTo(map);
-      markersRef.current.set(event.id, marker);
-    }
-  }, [events, blockedIps, leafletReady]);
 
   const recentEvents = [...events]
     .sort(
@@ -208,6 +497,9 @@ export default function LiveAttackMapPage({
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     )
     .slice(0, 8);
+
+  // Mark the most recent 5 attack dots as "recent" for pulsing
+  const recentIds = new Set(recentEvents.slice(0, 5).map((e) => e.id));
 
   const isAlreadyBlocked = selectedEvent
     ? blockedIps.some((b) => b.ip === selectedEvent.attackerIp)
@@ -236,8 +528,8 @@ export default function LiveAttackMapPage({
           LIVE ATTACK MAP
         </h1>
         <p className="text-xs font-mono text-muted-foreground mt-1">
-          Real-world geographic visualization of attack origins — OpenStreetMap
-          via CartoDB Dark
+          Real-world 3D globe visualization of attack origins — Interactive
+          rotating Earth
         </p>
       </div>
 
@@ -269,32 +561,40 @@ export default function LiveAttackMapPage({
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Real World Map */}
+        {/* 3D Globe */}
         <div
           className="xl:col-span-2 bg-card border border-border rounded-lg overflow-hidden relative"
           style={{ height: 480 }}
         >
-          <div className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 bg-black/80 rounded px-2 py-1 pointer-events-none">
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-black/80 rounded px-2 py-1 pointer-events-none">
             <Radio size={10} className="text-cyber-cyan animate-pulse" />
             <span className="text-[9px] font-mono text-cyber-cyan">
               LIVE TRACKING
             </span>
           </div>
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/80 rounded px-2 py-1 pointer-events-none">
+            <span className="text-[9px] font-mono text-cyber-cyan/60">
+              DRAG TO ROTATE • SCROLL TO ZOOM
+            </span>
+          </div>
 
-          {/* Leaflet map container */}
-          <div ref={mapRef} className="w-full h-full" />
-
-          {!leafletReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-              <p className="font-mono text-xs text-cyber-cyan animate-pulse">
-                LOADING MAP...
-              </p>
-            </div>
-          )}
+          <Canvas
+            camera={{ position: [0, 0, 2.8], fov: 45 }}
+            style={{ background: "#000508" }}
+            gl={{ antialias: true }}
+          >
+            <Suspense fallback={null}>
+              <GlobeScene
+                events={events}
+                recentIds={recentIds}
+                onSelectEvent={setSelectedEvent}
+              />
+            </Suspense>
+          </Canvas>
 
           {/* Selected event detail overlay */}
           {selectedEvent && (
-            <div className="absolute bottom-4 left-4 right-4 z-[1000] bg-black/90 border border-cyber-cyan/40 rounded-lg p-3">
+            <div className="absolute bottom-4 left-4 right-4 z-10 bg-black/90 border border-cyber-cyan/40 rounded-lg p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -495,31 +795,6 @@ export default function LiveAttackMapPage({
           </div>
         </div>
       </div>
-
-      {/* Leaflet popup styles override */}
-      <style>{`
-        .leaflet-cyber-popup .leaflet-popup-content-wrapper {
-          background: transparent;
-          border: none;
-          box-shadow: none;
-          padding: 0;
-        }
-        .leaflet-cyber-popup .leaflet-popup-content {
-          margin: 0;
-        }
-        .leaflet-cyber-popup .leaflet-popup-tip-container {
-          display: none;
-        }
-        .leaflet-control-zoom a {
-          background: rgba(0,0,0,0.8) !important;
-          color: rgba(0,255,200,0.8) !important;
-          border-color: rgba(0,255,200,0.2) !important;
-        }
-        .leaflet-control-zoom a:hover {
-          background: rgba(0,30,20,0.9) !important;
-          color: rgba(0,255,200,1) !important;
-        }
-      `}</style>
     </div>
   );
 }
