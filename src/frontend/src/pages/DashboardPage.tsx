@@ -1,4 +1,4 @@
-import { Activity, Bell, Radio } from "lucide-react";
+import { Activity, Bell, Radio, Shield } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   CartesianGrid,
@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { ScannerEvent, ThreatPoint } from "../types";
+import type { AttackEvent, ScannerEvent, ThreatPoint } from "../types";
 
 interface DashboardPageProps {
   threatLevel: number;
@@ -19,6 +19,7 @@ interface DashboardPageProps {
   threatTrend: ThreatPoint[];
   preventionCoverage: number;
   scannerEvents?: ScannerEvent[];
+  attackEvents?: AttackEvent[];
 }
 
 function StatCard({
@@ -573,6 +574,178 @@ function MLAnomalyPanel() {
   );
 }
 
+// ─── Recent Attack Details Panel ─────────────────────────────────────────────
+
+function getSeverityBadgeStyle(severity: string): string {
+  switch (severity.toLowerCase()) {
+    case "critical":
+      return "text-red-400 border-red-400/50 bg-red-400/10";
+    case "high":
+      return "text-orange-400 border-orange-400/50 bg-orange-400/10";
+    case "medium":
+      return "text-yellow-400 border-yellow-400/50 bg-yellow-400/10";
+    case "low":
+      return "text-green-400 border-green-400/50 bg-green-400/10";
+    default:
+      return "text-muted-foreground border-border bg-card";
+  }
+}
+
+function getSourceBadgeStyle(source: string): string {
+  switch (source) {
+    case "auto":
+      return "text-cyan-400 border-cyan-400/50 bg-cyan-400/10";
+    case "manual":
+      return "text-yellow-400 border-yellow-400/50 bg-yellow-400/10";
+    case "replay":
+      return "text-purple-400 border-purple-400/50 bg-purple-400/10";
+    default:
+      return "text-muted-foreground border-border";
+  }
+}
+
+function formatEventTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function RecentAttackDetailsPanel({
+  attackEvents,
+}: {
+  attackEvents?: AttackEvent[];
+}) {
+  const recent = attackEvents ? [...attackEvents].slice(-5).reverse() : [];
+
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.recent_attacks.panel"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-1">
+        <Shield
+          size={14}
+          className="text-red-400"
+          style={{ filter: "drop-shadow(0 0 6px oklch(0.55 0.22 25))" }}
+        />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          LIVE INTEL
+        </span>
+      </div>
+      <p
+        className="text-sm font-mono font-bold uppercase tracking-wide mb-4"
+        style={{
+          color: "oklch(0.72 0.2 35)",
+          textShadow: "0 0 10px oklch(0.62 0.22 35 / 0.6)",
+        }}
+      >
+        RECENT ATTACK DETAILS
+      </p>
+
+      {recent.length === 0 ? (
+        <div
+          className="flex items-center justify-center py-8"
+          data-ocid="dashboard.recent_attacks.empty_state"
+        >
+          <p className="text-[11px] font-mono text-emerald-500/60 tracking-widest animate-pulse">
+            ◈ NO ATTACK DATA YET — SYSTEM MONITORING ACTIVE
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3" data-ocid="dashboard.recent_attacks.list">
+          {recent.map((event, idx) => (
+            <div
+              key={event.id}
+              data-ocid={`dashboard.recent_attacks.item.${idx + 1}`}
+              className="border border-border rounded p-3 flex flex-col gap-2"
+              style={{
+                background: "oklch(0.09 0.012 248)",
+                borderLeft: `2px solid ${
+                  event.severity === "critical"
+                    ? "oklch(0.55 0.22 25)"
+                    : event.severity === "high"
+                      ? "oklch(0.65 0.18 50)"
+                      : event.severity === "medium"
+                        ? "oklch(0.78 0.18 80)"
+                        : "oklch(0.62 0.18 145)"
+                }`,
+              }}
+            >
+              {/* Row 1: timestamp + attack name + severity + source */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                  {formatEventTimestamp(event.timestamp)}
+                </span>
+                <span
+                  className="text-[11px] font-mono font-bold flex-1 min-w-0 truncate"
+                  style={{ color: "oklch(0.72 0.18 50)" }}
+                >
+                  {event.name.toUpperCase()}
+                </span>
+                <span
+                  className={`text-[9px] font-mono font-bold border rounded px-1.5 py-0.5 tracking-widest shrink-0 ${getSeverityBadgeStyle(
+                    event.severity,
+                  )}`}
+                >
+                  {event.severity.toUpperCase()}
+                </span>
+                <span
+                  className={`text-[9px] font-mono font-bold border rounded px-1.5 py-0.5 tracking-widest shrink-0 ${getSourceBadgeStyle(
+                    event.source,
+                  )}`}
+                >
+                  {event.source.toUpperCase()}
+                </span>
+              </div>
+
+              {/* Row 2: IP + city + attack type */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                  <span>🖥</span>
+                  <span className="text-foreground/70">{event.attackerIp}</span>
+                </span>
+                <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                  <span>📍</span>
+                  <span className="text-foreground/70">
+                    {event.city
+                      ? event.city.includes("India") || event.city.includes(",")
+                        ? event.city
+                        : `${event.city}, India`
+                      : "Unknown"}
+                  </span>
+                </span>
+                <span className="text-[10px] font-mono text-muted-foreground/60 truncate">
+                  {event.attackType}
+                </span>
+              </div>
+
+              {/* Row 3: website target if present */}
+              {event.websiteName && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-[10px] font-mono font-bold tracking-widest"
+                    style={{ color: "oklch(0.72 0.2 182)" }}
+                  >
+                    TARGET: {event.websiteName}
+                  </span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage({
   threatLevel,
   openAlerts,
@@ -581,6 +754,7 @@ export default function DashboardPage({
   threatTrend,
   preventionCoverage,
   scannerEvents,
+  attackEvents,
 }: DashboardPageProps) {
   return (
     <div className="p-6">
@@ -741,6 +915,9 @@ export default function DashboardPage({
 
       {/* ML Anomaly Panel */}
       <MLAnomalyPanel />
+
+      {/* Recent Attack Details Panel */}
+      <RecentAttackDetailsPanel attackEvents={attackEvents} />
     </div>
   );
 }

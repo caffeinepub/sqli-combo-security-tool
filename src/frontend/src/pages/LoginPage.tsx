@@ -24,13 +24,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }, 400);
   };
 
-  const fillDemo = (type: "admin" | "analyst") => {
+  const fillDemo = (type: "admin" | "analyst" | "webuser") => {
     if (type === "admin") {
       setEmail("admin@combodefense.local");
       setPassword("admin123");
-    } else {
+    } else if (type === "analyst") {
       setEmail("analyst@combodefense.local");
       setPassword("analyst123");
+    } else {
+      setEmail("webuser@combodefense.local");
+      setPassword("webuser123");
     }
   };
 
@@ -88,6 +91,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 analyst@combodefense.local / analyst123
               </p>
             </button>
+            <button
+              type="button"
+              data-ocid="login.webuser_demo.button"
+              onClick={() => fillDemo("webuser")}
+              className="w-full text-left p-3 rounded border border-border bg-secondary/40 hover:border-orange-400/40 hover:bg-secondary transition-colors"
+            >
+              <p className="text-[10px] font-mono uppercase tracking-widest text-orange-400 mb-1">
+                WEB TARGET USER
+              </p>
+              <p className="text-[11px] font-mono text-muted-foreground">
+                webuser / webuser123
+              </p>
+            </button>
           </div>
         </div>
 
@@ -106,16 +122,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 htmlFor="login-email"
                 className="block text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5"
               >
-                EMAIL
+                EMAIL / USERNAME
               </label>
               <Input
                 id="login-email"
                 data-ocid="login.email.input"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-card border-border font-mono text-xs focus:border-cyber-cyan focus:ring-cyber-cyan"
-                placeholder="your@email.com"
+                placeholder="your@email.com or username"
                 required
               />
             </div>

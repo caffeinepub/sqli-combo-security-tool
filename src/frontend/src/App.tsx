@@ -27,6 +27,7 @@ import SecurityLogoPage from "./pages/SecurityLogoPage";
 import SqliGuardLogoPage from "./pages/SqliGuardLogoPage";
 import UsersPage from "./pages/UsersPage";
 import WafPage from "./pages/WafPage";
+import WebTargetDashboard from "./pages/WebTargetDashboard";
 import type {
   ActivityEntry,
   Alert,
@@ -60,6 +61,7 @@ export default function App() {
     signal: string;
     city?: string;
     attackerIp?: string;
+    websiteName?: string;
   } | null>(null);
   const [analystNotification, setAnalystNotification] = useState<{
     name: string;
@@ -140,7 +142,9 @@ export default function App() {
             ? "analyst@combodefense.local"
             : email === "coadmin"
               ? "coadmin@combodefense.local"
-              : email;
+              : email === "webuser"
+                ? "webuser@combodefense.local"
+                : email;
 
       if (
         normalEmail === "admin@combodefense.local" &&
@@ -188,6 +192,22 @@ export default function App() {
         addActivity("User logged in", normalEmail);
         return true;
       }
+      if (
+        normalEmail === "webuser@combodefense.local" &&
+        password === "webuser123"
+      ) {
+        const u: User = {
+          name: "Web Target Tester",
+          email: normalEmail,
+          role: "webuser",
+        };
+        setUser(u);
+        setShowSqliLogo(false);
+        setScanning(false);
+        setPage("web-targets");
+        addActivity("Web Target User logged in", normalEmail);
+        return true;
+      }
       return false;
     },
     [addActivity],
@@ -213,6 +233,34 @@ export default function App() {
     setUser(null);
     setPage("login");
   }, [user, addActivity]);
+
+  const handleWebAttackTriggered = useCallback(
+    (websiteName: string) => {
+      const attackerIp = `103.21.58.${Math.floor(Math.random() * 254 + 1)}`;
+      setAttackPopup({
+        name: `CREDENTIAL STUFFING — ${websiteName}`,
+        severity: "critical",
+        signal: `Mass credential stuffing attack detected on ${websiteName}. 3 accounts breached.`,
+        city: "Mumbai",
+        attackerIp,
+        websiteName,
+      });
+      addAttackEvent({
+        name: `Credential Stuffing — ${websiteName}`,
+        severity: "critical",
+        city: "Mumbai",
+        attackerIp,
+        attackType: "Credential Stuffing",
+        source: "manual",
+        websiteName,
+      });
+      addActivity(
+        `Web attack: Credential stuffing on ${websiteName}`,
+        "webuser@combodefense.local",
+      );
+    },
+    [addAttackEvent, addActivity],
+  );
 
   const handleRunReplay = useCallback(
     (scenarioName: string, scenarioId: string) => {
@@ -265,6 +313,7 @@ export default function App() {
           name: scenarioName,
           severity: scenarioId === "sqli" ? "critical" : "high",
           signal: meta.attackType,
+          city: meta.hackerIp ? "Mumbai" : "Delhi",
           attackerIp: meta.hackerIp,
         });
       }
@@ -331,6 +380,8 @@ export default function App() {
   // ── Auto-attack timer (every 90 seconds) ── only fires in auto mode
   useEffect(() => {
     if (!user || page === "login" || attackMode !== "auto") return;
+    // Don't fire auto-attacks for webuser
+    if (user.role === "webuser") return;
     const interval = setInterval(() => {
       const autoAttack = generateAutoAttack();
       setAttackPopup(autoAttack);
@@ -415,6 +466,27 @@ export default function App() {
     );
   }
 
+  // WebUser gets completely separate dashboard
+  if (user.role === "webuser") {
+    return (
+      <>
+        <WebTargetDashboard
+          user={user}
+          onLogout={handleLogout}
+          onAttackTriggered={handleWebAttackTriggered}
+        />
+        <Toaster theme="dark" />
+        <AttackAlertPopup
+          attack={attackPopup}
+          onDismiss={() => setAttackPopup(null)}
+          blockedIps={blockedIps}
+          onBlockIp={handleBlockIp}
+          currentUserEmail={user.email}
+        />
+      </>
+    );
+  }
+
   const renderPage = () => {
     switch (page) {
       case "dashboard":
@@ -427,6 +499,7 @@ export default function App() {
             threatTrend={threatTrend}
             preventionCoverage={preventionCoverage}
             scannerEvents={scannerEvents}
+            attackEvents={attackEvents}
           />
         );
       case "users":

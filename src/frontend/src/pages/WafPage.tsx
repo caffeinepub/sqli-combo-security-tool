@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Globe,
   Lock,
+  MonitorPlay,
   RefreshCw,
   Shield,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
+import WafSimulationModal from "../components/WafSimulationModal";
 import type { BlockedIp } from "../types";
 
 interface WafPageProps {
@@ -241,6 +243,7 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
   const [activeTab, setActiveTab] = useState<"rules" | "blocked" | "ips">(
     "rules",
   );
+  const [showSimulation, setShowSimulation] = useState(false);
 
   const toggleRule = (id: string) => {
     setRules((prev) =>
@@ -269,6 +272,66 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
         </h1>
         <p className="text-xs font-mono text-muted-foreground mt-1">
           Real-time WAF rule management, blocked request log, and IP block list
+        </p>
+      </div>
+
+      {/* VIEW ATTACK SIMULATION button */}
+      <div className="mb-5">
+        <button
+          type="button"
+          onClick={() => setShowSimulation(true)}
+          data-ocid="waf.open_modal_button"
+          className="relative flex items-center gap-3 px-6 py-3 rounded-lg border-2 font-mono text-sm font-bold tracking-widest transition-all group overflow-hidden"
+          style={{
+            borderColor: "rgba(0,229,255,0.55)",
+            color: "#00e5ff",
+            background: "rgba(0,229,255,0.04)",
+            boxShadow:
+              "0 0 20px rgba(0,229,255,0.12), inset 0 0 20px rgba(0,229,255,0.03)",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.boxShadow =
+              "0 0 35px rgba(0,229,255,0.3), inset 0 0 30px rgba(0,229,255,0.07)";
+            (e.currentTarget as HTMLButtonElement).style.background =
+              "rgba(0,229,255,0.08)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.boxShadow =
+              "0 0 20px rgba(0,229,255,0.12), inset 0 0 20px rgba(0,229,255,0.03)";
+            (e.currentTarget as HTMLButtonElement).style.background =
+              "rgba(0,229,255,0.04)";
+          }}
+        >
+          {/* Animated scan line */}
+          <span
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent 0%, rgba(0,229,255,0.08) 50%, transparent 100%)",
+              animation: "scanLine 2.5s linear infinite",
+            }}
+          />
+          <MonitorPlay size={18} style={{ color: "#00e5ff" }} />
+          <span>▶ VIEW ATTACK SIMULATION</span>
+          <span
+            className="text-[9px] font-mono tracking-widest ml-2 px-1.5 py-0.5 rounded border"
+            style={{
+              borderColor: "rgba(0,255,65,0.4)",
+              color: "#00ff41",
+              background: "rgba(0,255,65,0.08)",
+            }}
+          >
+            LIVE DEMO
+          </span>
+          <style>{`
+            @keyframes scanLine {
+              from { transform: translateX(-100%); }
+              to   { transform: translateX(200%); }
+            }
+          `}</style>
+        </button>
+        <p className="text-[9px] font-mono text-muted-foreground/60 mt-1.5 ml-1 tracking-widest">
+          Visualize how WAF intercepts attacks and redirects to honeypot clone
         </p>
       </div>
 
@@ -670,6 +733,12 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
           </div>
         ))}
       </div>
+
+      {/* WAF Attack Simulation Modal */}
+      <WafSimulationModal
+        open={showSimulation}
+        onClose={() => setShowSimulation(false)}
+      />
     </div>
   );
 }

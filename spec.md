@@ -1,42 +1,52 @@
-# SQLi Combo Security Tool
+# SQLi Combo Security Tool — WAF Attack Simulation Animation
 
 ## Current State
-- Full cyberpunk cybersecurity training platform with Attack, Detect, Prevent, Dashboard, Users, Reports, Timeline, and Live Attack Map pages.
-- Live Attack Map uses a hand-drawn SVG India outline with hardcoded paths — not a real geographic map.
-- No WAF (Web Application Firewall) management page exists.
-- No IP blocking functionality when attacks are detected.
-- Attack popups and Detect modal show attacker IP but have no way to block it.
+
+The WAF tab (`WafPage.tsx`) is a full-featured firewall management page with:
+- Master ON/OFF firewall toggle
+- 10 WAF rules with enable/disable toggles and hit counts
+- Blocked requests log
+- Blocked IP management panel
+- Security posture summary stats (bottom)
+
+No animation or simulation panel exists in the WAF tab yet.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Real World Map**: Replace the custom SVG India outline in LiveAttackMapPage with a Leaflet-based real-world tile map. Attack dots show as pulsing markers at accurate lat/lon coordinates for each Indian city. Clicking a marker shows a popup with attack details.
-- **WAF (Secure Web Application Firewall) Tab**: New "WAF" tab in the Sidebar (admin/co-admin only). New `WafPage` showing: firewall status toggle (ON/OFF), active WAF rules list (SQLi, XSS, CSRF, RCE, etc.), blocked requests log, and blocked IP list. All simulated/demo data.
-- **IP Blocking**: 
-  - New `blockedIps` state array in App.tsx.
-  - `handleBlockIp(ip)` function that adds an IP to the blocked list and logs the action.
-  - "BLOCK IP" button on the AttackAlertPopup (when attackerIp is present).
-  - "BLOCK IP" button in the DetectPage Threat Intelligence modal.
-  - Blocked IPs are passed to WafPage to display in the blocked IP list.
-  - Visual indicator in AttackAlertPopup/DetectModal if IP is already blocked.
+- A new **"VIEW ATTACK SIMULATION"** button at the top of the WafPage (prominent, cyberpunk-styled, glowing cyan/green)
+- A new **`WafSimulationModal`** component (full-screen overlay/modal) that opens when the button is clicked
+- The modal contains a **3-phase animated visual scene** that auto-loops through steps:
+  - **Phase 1 — Direct Attack**: Attacker browser window fires animated attack packets (flying red/orange projectiles with labels like `SQL INJECTION`, `XSS`, `PAYLOAD`) toward the Main Site browser window. The main site shows stress/damage indicators.
+  - **Phase 2 — WAF Intercepts**: A glowing WAF Shield appears between the attacker and the main site. Attack packets hit the shield and are deflected/blocked. The shield shows block animations. A new Clone Site browser window materializes (green, slightly transparent, labeled "HONEYPOT / CLONE SITE").
+  - **Phase 3 — Bypass to Clone**: The WAF redirects the attacker silently toward the Clone site. Attack packets now fly toward the clone. The clone shows fake "success" indicators while the main site shows "PROTECTED / SECURE". Final banner: "ATTACKER TRAPPED IN CLONE — MAIN SITE SECURED".
+- Each phase has:
+  - A phase indicator bar (Phase 1 / 2 / 3 with progress dots)
+  - Phase label and description text below the animation canvas
+  - A "NEXT STEP" button to advance manually AND auto-advance every ~3.5 seconds when looping
+  - The loop restarts from Phase 1 after Phase 3 completes
+- Visual style: dark background with matrix green code rain in background, neon glowing elements (cyan, green, red, orange), cyberpunk browser window chrome, animated SVG/CSS packets
+- A close button (X) in the top-right to dismiss the modal
 
 ### Modify
-- `LiveAttackMapPage.tsx`: Replace SVG map with Leaflet real-world map using OpenStreetMap tiles. Keep the side panels (stats, recent attacks, top cities) unchanged.
-- `App.tsx`: Add `blockedIps` state, `handleBlockIp` function, pass to AttackAlertPopup, DetectPage, and WafPage.
-- `AttackAlertPopup.tsx`: Add "BLOCK IP" button when `attackerIp` is present. Show "ALREADY BLOCKED" if IP is in blockedIps.
-- `DetectPage.tsx`: Add "BLOCK IP" button in the Threat Intelligence modal. Pass blockedIps and onBlockIp props.
-- `Sidebar.tsx`: Add "WAF" nav item for admin/co-admin.
-- `types.ts`: Add `"waf"` to the `Page` union type. Add `BlockedIp` interface.
+- `WafPage.tsx`: Add the "VIEW ATTACK SIMULATION" button near the top header section, and import/render the new modal with open/close state
 
 ### Remove
-- Nothing. All existing features remain unchanged.
+- Nothing removed
 
 ## Implementation Plan
-1. Install `leaflet` and `react-leaflet` packages, add Leaflet CSS import.
-2. Update `types.ts` — add `"waf"` page, `BlockedIp` interface.
-3. Rewrite `LiveAttackMapPage.tsx` using `MapContainer`, `TileLayer`, `CircleMarker`, `Popup` from react-leaflet.
-4. Create `WafPage.tsx` with firewall status, rules, blocked requests log, and blocked IPs panel.
-5. Update `AttackAlertPopup.tsx` to accept `blockedIps` and `onBlockIp` props, show BLOCK IP button.
-6. Update `DetectPage.tsx` to accept `blockedIps` and `onBlockIp` props, show BLOCK IP in modal.
-7. Update `App.tsx` — add blockedIps state, handleBlockIp, wire WAF page, pass new props.
-8. Update `Sidebar.tsx` — add WAF nav item for admin/co-admin role.
+
+1. Create `src/frontend/src/components/WafSimulationModal.tsx`:
+   - Full-screen dark overlay modal with close button
+   - Canvas area with three animated "browser window" boxes: Attacker (red), Main Site (blue/white), Clone Site (green)
+   - Animated flying packets using CSS keyframe animations (translate + fade)
+   - WAF Shield SVG element that appears in Phase 2+
+   - Phase state machine: currentPhase (1|2|3), auto-advance timer, manual NEXT button
+   - Matrix code rain as canvas background
+   - Phase description text area with typewriter effect
+   - Auto-loop: after Phase 3 → pause 1.5s → reset to Phase 1
+
+2. Update `WafPage.tsx`:
+   - Add `useState` for `showSimulation` boolean
+   - Add "VIEW ATTACK SIMULATION" button at top of page (below the header/toggle bar)
+   - Import and render `<WafSimulationModal>` with open/close handler

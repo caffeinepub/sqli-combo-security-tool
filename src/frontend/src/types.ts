@@ -9,7 +9,8 @@ export type Page =
   | "users"
   | "timeline"
   | "map"
-  | "waf";
+  | "waf"
+  | "web-targets";
 
 export type Role =
   | "admin"
@@ -18,7 +19,8 @@ export type Role =
   | "viewer"
   | "monitor"
   | "auditor"
-  | "responder";
+  | "responder"
+  | "webuser";
 
 export interface User {
   name: string;
@@ -100,6 +102,7 @@ export interface AttackEvent {
   attackerIp: string;
   attackType: string;
   source: "auto" | "manual" | "replay";
+  websiteName?: string;
 }
 
 export interface BlockedIp {

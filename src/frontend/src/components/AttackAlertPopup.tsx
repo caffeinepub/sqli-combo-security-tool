@@ -10,6 +10,7 @@ interface AttackInfo {
   signal: string;
   city?: string;
   attackerIp?: string;
+  websiteName?: string;
 }
 
 interface AttackAlertPopupProps {
@@ -164,6 +165,17 @@ export default function AttackAlertPopup({
                     >
                       ATTACK DETECTED
                     </h2>
+                    {attack.websiteName && (
+                      <div
+                        className="font-mono text-xs tracking-widest mt-1"
+                        style={{
+                          color: "#22d3ee",
+                          textShadow: "0 0 10px rgba(34,211,238,0.6)",
+                        }}
+                      >
+                        TARGET: {attack.websiteName}
+                      </div>
+                    )}
                   </div>
                 </div>
 

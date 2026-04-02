@@ -1,5 +1,3 @@
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 import {
   AlertTriangle,
   Globe,
@@ -10,18 +8,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AttackEvent, BlockedIp } from "../types";
-
-// Fix Leaflet's broken default icon path in bundlers
-(L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl =
-  undefined;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
 
 interface LiveAttackMapPageProps {
   events: AttackEvent[];
@@ -78,6 +64,39 @@ function formatTime(ts: string) {
   });
 }
 
+// Load leaflet CSS dynamically
+function ensureLeafletCss() {
+  if (document.getElementById("leaflet-css")) return;
+  const link = document.createElement("link");
+  link.id = "leaflet-css";
+  link.rel = "stylesheet";
+  link.href =
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+  document.head.appendChild(link);
+}
+
+// Load leaflet JS dynamically
+function loadLeaflet(): Promise<typeof window.L> {
+  return new Promise((resolve, reject) => {
+    if (window.L) {
+      resolve(window.L);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src =
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    script.onload = () => resolve(window.L);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+declare global {
+  interface Window {
+    L: any;
+  }
+}
+
 export default function LiveAttackMapPage({
   events,
   blockedIps,
@@ -85,13 +104,23 @@ export default function LiveAttackMapPage({
   currentUser,
 }: LiveAttackMapPageProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
+  const leafletMapRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
   const [selectedEvent, setSelectedEvent] = useState<AttackEvent | null>(null);
+  const [leafletReady, setLeafletReady] = useState(false);
+
+  // Load Leaflet from CDN
+  useEffect(() => {
+    ensureLeafletCss();
+    loadLeaflet()
+      .then(() => setLeafletReady(true))
+      .catch(() => console.error("Failed to load Leaflet"));
+  }, []);
 
   // Initialize Leaflet map
   useEffect(() => {
-    if (!mapRef.current || leafletMapRef.current) return;
+    if (!leafletReady || !mapRef.current || leafletMapRef.current) return;
+    const L = window.L;
 
     const map = L.map(mapRef.current, {
       center: [20.5, 79],
@@ -100,7 +129,6 @@ export default function LiveAttackMapPage({
       attributionControl: true,
     });
 
-    // Dark tile layer from CartoDB
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       {
@@ -111,10 +139,9 @@ export default function LiveAttackMapPage({
       },
     ).addTo(map);
 
-    // Style attribution to match cyberpunk theme
     const attrEl = map
       .getContainer()
-      .querySelector(".leaflet-control-attribution") as HTMLElement;
+      .querySelector(".leaflet-control-attribution");
     if (attrEl) {
       attrEl.style.background = "rgba(0,0,0,0.7)";
       attrEl.style.color = "rgba(0,255,200,0.4)";
@@ -126,13 +153,15 @@ export default function LiveAttackMapPage({
     return () => {
       map.remove();
       leafletMapRef.current = null;
+      markersRef.current.clear();
     };
-  }, []);
+  }, [leafletReady]);
 
   // Sync events to markers
   useEffect(() => {
     const map = leafletMapRef.current;
-    if (!map) return;
+    if (!map || !leafletReady) return;
+    const L = window.L;
 
     for (const event of events) {
       if (markersRef.current.has(event.id)) continue;
@@ -157,12 +186,12 @@ export default function LiveAttackMapPage({
 
       marker.bindPopup(
         `<div style="font-family:monospace;background:#0a0f0a;border:1px solid rgba(0,255,200,0.3);padding:12px;border-radius:6px;min-width:200px;">
-          <div style="color:${color};font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">${event.severity} — ${event.attackType}</div>
+          <div style="color:${color};font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">${event.severity} \u2014 ${event.attackType}</div>
           <div style="color:#e2e8f0;font-size:12px;font-weight:bold;margin-bottom:4px;">${event.name}</div>
-          <div style="color:#94a3b8;font-size:10px;">📍 ${event.city}, India</div>
-          <div style="color:#94a3b8;font-size:10px;">🖥 ${event.attackerIp}</div>
+          <div style="color:#94a3b8;font-size:10px;">\uD83D\uDCCD ${event.city}, India</div>
+          <div style="color:#94a3b8;font-size:10px;">\uD83D\uDDA5 ${event.attackerIp}</div>
           <div style="color:#64748b;font-size:9px;margin-top:4px;">${formatTime(event.timestamp)}</div>
-          ${isBlocked ? '<div style="color:#22c55e;font-size:9px;margin-top:4px;font-weight:bold;">✓ IP BLOCKED</div>' : ""}
+          ${isBlocked ? '<div style="color:#22c55e;font-size:9px;margin-top:4px;font-weight:bold;">\u2713 IP BLOCKED</div>' : ""}
         </div>`,
         { className: "leaflet-cyber-popup" },
       );
@@ -171,7 +200,7 @@ export default function LiveAttackMapPage({
       marker.addTo(map);
       markersRef.current.set(event.id, marker);
     }
-  }, [events, blockedIps]);
+  }, [events, blockedIps, leafletReady]);
 
   const recentEvents = [...events]
     .sort(
@@ -254,6 +283,14 @@ export default function LiveAttackMapPage({
 
           {/* Leaflet map container */}
           <div ref={mapRef} className="w-full h-full" />
+
+          {!leafletReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+              <p className="font-mono text-xs text-cyber-cyan animate-pulse">
+                LOADING MAP...
+              </p>
+            </div>
+          )}
 
           {/* Selected event detail overlay */}
           {selectedEvent && (
