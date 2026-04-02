@@ -1,7 +1,8 @@
-import { AlertTriangle, ShieldAlert, X, Zap } from "lucide-react";
+import { AlertTriangle, Ban, ShieldAlert, X, Zap } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playAlarmSound } from "../hooks/useSoundEffect";
+import type { BlockedIp } from "../types";
 
 interface AttackInfo {
   name: string;
@@ -14,6 +15,9 @@ interface AttackInfo {
 interface AttackAlertPopupProps {
   attack: AttackInfo | null;
   onDismiss: () => void;
+  blockedIps?: BlockedIp[];
+  onBlockIp?: (ip: string, reason: string, blockedBy: string) => void;
+  currentUserEmail?: string;
 }
 
 const DURATION = 90;
@@ -21,9 +25,13 @@ const DURATION = 90;
 export default function AttackAlertPopup({
   attack,
   onDismiss,
+  blockedIps = [],
+  onBlockIp,
+  currentUserEmail = "admin@combodefense.local",
 }: AttackAlertPopupProps) {
   const [remaining, setRemaining] = useState(DURATION);
   const [glitch, setGlitch] = useState(false);
+  const [justBlocked, setJustBlocked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const glitchRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onDismissRef = useRef(onDismiss);
@@ -31,15 +39,18 @@ export default function AttackAlertPopup({
 
   const handleDismiss = useCallback(() => {
     onDismissRef.current();
+    setJustBlocked(false);
   }, []);
 
   useEffect(() => {
     if (!attack) {
       setRemaining(DURATION);
+      setJustBlocked(false);
       return;
     }
 
     setRemaining(DURATION);
+    setJustBlocked(false);
     playAlarmSound();
 
     timerRef.current = setInterval(() => {
@@ -75,6 +86,20 @@ export default function AttackAlertPopup({
   const severityColor =
     severityColorMap[attack?.severity ?? "high"] ??
     "text-orange-400 bg-orange-400/10 border-orange-400/50";
+
+  const isAlreadyBlocked =
+    attack?.attackerIp != null &&
+    blockedIps.some((b) => b.ip === attack.attackerIp);
+
+  const handleBlockIp = () => {
+    if (!attack?.attackerIp || !onBlockIp) return;
+    onBlockIp(
+      attack.attackerIp,
+      `Auto-alert: ${attack.name}${attack.city ? ` from ${attack.city}` : ""}`,
+      currentUserEmail,
+    );
+    setJustBlocked(true);
+  };
 
   return (
     <AnimatePresence>
@@ -154,7 +179,7 @@ export default function AttackAlertPopup({
 
               {/* Attack details */}
               <div
-                className="rounded-lg p-4 mb-5"
+                className="rounded-lg p-4 mb-4"
                 style={{
                   background: "rgba(220,30,30,0.07)",
                   border: "1px solid rgba(220,30,30,0.2)",
@@ -196,6 +221,29 @@ export default function AttackAlertPopup({
                   </div>
                 )}
               </div>
+
+              {/* IP Block Button */}
+              {attack.attackerIp && onBlockIp && (
+                <div className="mb-4">
+                  {isAlreadyBlocked || justBlocked ? (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded border border-green-500/30 bg-green-500/5">
+                      <Ban className="w-3.5 h-3.5 text-green-400" />
+                      <span className="font-mono text-xs text-green-400 tracking-widest">
+                        IP {attack.attackerIp} IS BLOCKED
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleBlockIp}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded border border-red-500/50 text-red-400 font-mono text-xs font-bold tracking-widest hover:bg-red-500/10 transition-colors"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      BLOCK ATTACKER IP: {attack.attackerIp}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Countdown bar */}
               <div className="mb-4">

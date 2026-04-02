@@ -5,6 +5,7 @@ import {
   Globe,
   History,
   LayoutDashboard,
+  Lock,
   LogOut,
   Shield,
   ShieldCheck,
@@ -19,7 +20,12 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
+const navItems: {
+  page: Page;
+  label: string;
+  icon: React.ReactNode;
+  adminOnly?: boolean;
+}[] = [
   {
     page: "dashboard",
     label: "DASHBOARD",
@@ -29,7 +35,13 @@ const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
   { page: "attack", label: "ATTACK", icon: <Crosshair size={16} /> },
   { page: "detect", label: "DETECT", icon: <Shield size={16} /> },
   { page: "prevent", label: "PREVENT", icon: <ShieldCheck size={16} /> },
-  { page: "reports", label: "REPORTS", icon: <FileText size={16} /> },
+  {
+    page: "reports",
+    label: "REPORTS",
+    icon: <FileText size={16} />,
+    adminOnly: true,
+  },
+  { page: "waf", label: "WAF", icon: <Lock size={16} />, adminOnly: true },
   { page: "timeline", label: "TIMELINE", icon: <History size={16} /> },
   { page: "map", label: "LIVE MAP", icon: <Globe size={16} /> },
   { page: "activity", label: "ACTIVITY", icon: <Activity size={16} /> },
@@ -41,6 +53,8 @@ export default function Sidebar({
   user,
   onLogout,
 }: SidebarProps) {
+  const isAdmin = user.role === "admin";
+
   return (
     <aside className="w-56 flex flex-col shrink-0 bg-sidebar border-r border-border h-full">
       {/* Brand */}
@@ -61,24 +75,32 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ page, label, icon }) => (
-          <button
-            type="button"
-            key={page}
-            data-ocid={`nav.${page}.link`}
-            onClick={() => onNavigate(page)}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left text-[11px] font-mono tracking-widest transition-colors ${
-              currentPage === page
-                ? "bg-cyber-cyan/10 text-cyber-cyan border-l-2 border-cyber-cyan"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-          >
-            <span className={currentPage === page ? "text-cyber-cyan" : ""}>
-              {icon}
-            </span>
-            {label}
-          </button>
-        ))}
+        {navItems.map(({ page, label, icon, adminOnly }) => {
+          if (adminOnly && !isAdmin) return null;
+          return (
+            <button
+              type="button"
+              key={page}
+              data-ocid={`nav.${page}.link`}
+              onClick={() => onNavigate(page)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left text-[11px] font-mono tracking-widest transition-colors ${
+                currentPage === page
+                  ? "bg-cyber-cyan/10 text-cyber-cyan border-l-2 border-cyber-cyan"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}
+            >
+              <span className={currentPage === page ? "text-cyber-cyan" : ""}>
+                {icon}
+              </span>
+              {label}
+              {page === "waf" && (
+                <span className="ml-auto text-[8px] font-mono text-cyber-cyan/50 border border-cyber-cyan/20 rounded px-1">
+                  ADM
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       {/* User */}

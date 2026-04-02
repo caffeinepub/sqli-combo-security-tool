@@ -1,102 +1,74 @@
-import { AlertTriangle, Globe, MapPin, Radio, Wifi } from "lucide-react";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import {
+  AlertTriangle,
+  Globe,
+  MapPin,
+  Radio,
+  Shield,
+  Wifi,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { AttackEvent } from "../types";
+import type { AttackEvent, BlockedIp } from "../types";
+
+// Fix Leaflet's broken default icon path in bundlers
+(L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl =
+  undefined;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+});
 
 interface LiveAttackMapPageProps {
   events: AttackEvent[];
+  blockedIps: BlockedIp[];
+  onBlockIp: (ip: string, reason: string, blockedBy: string) => void;
+  currentUser?: { name: string; email: string };
 }
-
-// India bounding box: lat 6-38, lon 66-99
-const LAT_MIN = 6;
-const LAT_MAX = 38;
-const LON_MIN = 66;
-const LON_MAX = 99;
 
 const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
-  Mumbai: { lat: 19.08, lon: 72.88 },
-  Delhi: { lat: 28.61, lon: 77.21 },
-  Bengaluru: { lat: 12.97, lon: 77.59 },
-  Chennai: { lat: 13.08, lon: 80.27 },
-  Hyderabad: { lat: 17.38, lon: 78.49 },
-  Kolkata: { lat: 22.57, lon: 88.36 },
-  Pune: { lat: 18.52, lon: 73.86 },
-  Ahmedabad: { lat: 23.03, lon: 72.58 },
-  Jaipur: { lat: 26.92, lon: 75.79 },
-  Surat: { lat: 21.17, lon: 72.83 },
-  Lucknow: { lat: 26.85, lon: 80.95 },
-  Kanpur: { lat: 26.46, lon: 80.35 },
-  Nagpur: { lat: 21.15, lon: 79.09 },
-  Indore: { lat: 22.72, lon: 75.86 },
-  Bhopal: { lat: 23.26, lon: 77.4 },
-  Patna: { lat: 25.6, lon: 85.13 },
-  Vadodara: { lat: 22.31, lon: 73.18 },
-  Coimbatore: { lat: 11.02, lon: 76.96 },
-  Visakhapatnam: { lat: 17.69, lon: 83.22 },
-  Chandigarh: { lat: 30.73, lon: 76.78 },
-  Kochi: { lat: 9.93, lon: 76.26 },
-  Thiruvananthapuram: { lat: 8.52, lon: 76.94 },
-  Guwahati: { lat: 26.18, lon: 91.74 },
-  Bhubaneswar: { lat: 20.3, lon: 85.84 },
-  Ranchi: { lat: 23.34, lon: 85.31 },
-  Amritsar: { lat: 31.63, lon: 74.87 },
-  Ludhiana: { lat: 30.9, lon: 75.85 },
-  Agra: { lat: 27.18, lon: 78.01 },
-  Varanasi: { lat: 25.32, lon: 83.01 },
-  Meerut: { lat: 28.98, lon: 77.71 },
+  Mumbai: { lat: 19.076, lon: 72.877 },
+  Delhi: { lat: 28.613, lon: 77.209 },
+  Bengaluru: { lat: 12.972, lon: 77.594 },
+  Chennai: { lat: 13.083, lon: 80.27 },
+  Hyderabad: { lat: 17.385, lon: 78.486 },
+  Kolkata: { lat: 22.572, lon: 88.363 },
+  Pune: { lat: 18.52, lon: 73.856 },
+  Ahmedabad: { lat: 23.022, lon: 72.571 },
+  Jaipur: { lat: 26.912, lon: 75.787 },
+  Surat: { lat: 21.17, lon: 72.831 },
+  Lucknow: { lat: 26.846, lon: 80.946 },
+  Kanpur: { lat: 26.449, lon: 80.331 },
+  Nagpur: { lat: 21.145, lon: 79.088 },
+  Indore: { lat: 22.719, lon: 75.857 },
+  Bhopal: { lat: 23.259, lon: 77.412 },
+  Patna: { lat: 25.594, lon: 85.137 },
+  Vadodara: { lat: 22.307, lon: 73.181 },
+  Coimbatore: { lat: 11.016, lon: 76.955 },
+  Visakhapatnam: { lat: 17.686, lon: 83.218 },
+  Chandigarh: { lat: 30.733, lon: 76.779 },
+  Kochi: { lat: 9.939, lon: 76.26 },
+  Guwahati: { lat: 26.144, lon: 91.736 },
+  Bhubaneswar: { lat: 20.296, lon: 85.824 },
+  Ranchi: { lat: 23.344, lon: 85.309 },
+  Amritsar: { lat: 31.634, lon: 74.872 },
+  Agra: { lat: 27.176, lon: 78.008 },
+  Varanasi: { lat: 25.317, lon: 83.013 },
+  Meerut: { lat: 28.984, lon: 77.706 },
+  Nashik: { lat: 20.011, lon: 73.79 },
+  Thiruvananthapuram: { lat: 8.524, lon: 76.936 },
 };
 
-const SVG_W = 500;
-const SVG_H = 560;
-
-function latLonToSvg(lat: number, lon: number) {
-  const x = ((lon - LON_MIN) / (LON_MAX - LON_MIN)) * SVG_W;
-  const y = ((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * SVG_H;
-  return { x, y };
-}
-
-const INDIA_PATH = `
-M 195 30 L 220 20 L 255 18 L 290 25 L 330 22 L 360 35 L 380 55 L 400 80
-L 410 105 L 415 130 L 420 150 L 430 170 L 440 195 L 445 220 L 440 245
-L 430 265 L 415 280 L 400 295 L 385 315 L 370 335 L 355 355 L 340 375
-L 325 395 L 310 415 L 295 430 L 280 445 L 265 455 L 255 465 L 245 475
-L 240 485 L 238 495 L 240 505 L 245 515 L 252 522 L 258 518 L 262 510
-L 260 500 L 258 490 L 262 480 L 268 470 L 278 460 L 285 450
-L 295 440 L 310 425 L 325 410 L 340 390 L 355 370 L 368 350
-L 380 328 L 390 305 L 398 282 L 402 258 L 400 232 L 395 208
-L 385 185 L 375 162 L 360 142 L 345 125 L 325 112 L 305 102
-L 280 95 L 255 90 L 232 92 L 210 98 L 192 110 L 178 128
-L 168 150 L 162 175 L 158 200 L 160 225 L 165 248 L 172 268
-L 180 285 L 175 290 L 162 295 L 148 292 L 138 280 L 132 265
-L 128 248 L 125 228 L 126 208 L 130 188 L 136 168 L 145 150
-L 155 133 L 167 117 L 182 104 L 195 93 L 200 75 L 198 55 L 195 30
-Z
-`;
-
-const SEVERITY_COLORS_HEX: Record<string, string> = {
+const SEVERITY_COLORS: Record<string, string> = {
   critical: "#ef4444",
   high: "#f97316",
   medium: "#eab308",
   low: "#22c55e",
 };
-
-const SEVERITY_GLOW: Record<string, string> = {
-  critical: "rgba(239,68,68,0.6)",
-  high: "rgba(249,115,22,0.6)",
-  medium: "rgba(234,179,8,0.6)",
-  low: "rgba(34,197,94,0.6)",
-};
-
-interface MapDot {
-  id: string;
-  x: number;
-  y: number;
-  city: string;
-  severity: string;
-  name: string;
-  attackerIp: string;
-  timestamp: string;
-  attackType: string;
-}
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], {
@@ -106,56 +78,100 @@ function formatTime(ts: string) {
   });
 }
 
-export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
-  const [dots, setDots] = useState<MapDot[]>([]);
-  const [selected, setSelected] = useState<MapDot | null>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
-  const prevLen = useRef(0);
+export default function LiveAttackMapPage({
+  events,
+  blockedIps,
+  onBlockIp,
+  currentUser,
+}: LiveAttackMapPageProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
+  const [selectedEvent, setSelectedEvent] = useState<AttackEvent | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional sync on events.length
+  // Initialize Leaflet map
   useEffect(() => {
-    const newEvents = events.slice(prevLen.current);
-    prevLen.current = events.length;
+    if (!mapRef.current || leafletMapRef.current) return;
 
-    if (newEvents.length === 0 && dots.length === 0) {
-      const allDots: MapDot[] = events.map((e) => {
-        const coords = CITY_COORDS[e.city] ?? { lat: 20.5, lon: 78.9 };
-        const { x, y } = latLonToSvg(coords.lat, coords.lon);
-        return {
-          id: e.id,
-          x: x + (Math.random() - 0.5) * 8,
-          y: y + (Math.random() - 0.5) * 8,
-          city: e.city,
-          severity: e.severity,
-          name: e.name,
-          attackerIp: e.attackerIp,
-          timestamp: e.timestamp,
-          attackType: e.attackType,
-        };
-      });
-      setDots(allDots);
-      return;
+    const map = L.map(mapRef.current, {
+      center: [20.5, 79],
+      zoom: 5,
+      zoomControl: true,
+      attributionControl: true,
+    });
+
+    // Dark tile layer from CartoDB
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 19,
+      },
+    ).addTo(map);
+
+    // Style attribution to match cyberpunk theme
+    const attrEl = map
+      .getContainer()
+      .querySelector(".leaflet-control-attribution") as HTMLElement;
+    if (attrEl) {
+      attrEl.style.background = "rgba(0,0,0,0.7)";
+      attrEl.style.color = "rgba(0,255,200,0.4)";
+      attrEl.style.fontSize = "8px";
     }
 
-    if (newEvents.length > 0) {
-      const newDots: MapDot[] = newEvents.map((e) => {
-        const coords = CITY_COORDS[e.city] ?? { lat: 20.5, lon: 78.9 };
-        const { x, y } = latLonToSvg(coords.lat, coords.lon);
-        return {
-          id: e.id,
-          x: x + (Math.random() - 0.5) * 8,
-          y: y + (Math.random() - 0.5) * 8,
-          city: e.city,
-          severity: e.severity,
-          name: e.name,
-          attackerIp: e.attackerIp,
-          timestamp: e.timestamp,
-          attackType: e.attackType,
-        };
+    leafletMapRef.current = map;
+
+    return () => {
+      map.remove();
+      leafletMapRef.current = null;
+    };
+  }, []);
+
+  // Sync events to markers
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    for (const event of events) {
+      if (markersRef.current.has(event.id)) continue;
+
+      const coords = CITY_COORDS[event.city] ?? { lat: 20.5, lon: 79 };
+      const color = SEVERITY_COLORS[event.severity] ?? "#888";
+      const isBlocked = blockedIps.some((b) => b.ip === event.attackerIp);
+
+      const marker = L.circleMarker([coords.lat, coords.lon], {
+        radius:
+          event.severity === "critical"
+            ? 10
+            : event.severity === "high"
+              ? 8
+              : 6,
+        fillColor: color,
+        color: isBlocked ? "#22c55e" : color,
+        weight: isBlocked ? 2 : 1.5,
+        opacity: 0.9,
+        fillOpacity: 0.7,
       });
-      setDots((prev) => [...prev, ...newDots]);
+
+      marker.bindPopup(
+        `<div style="font-family:monospace;background:#0a0f0a;border:1px solid rgba(0,255,200,0.3);padding:12px;border-radius:6px;min-width:200px;">
+          <div style="color:${color};font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">${event.severity} — ${event.attackType}</div>
+          <div style="color:#e2e8f0;font-size:12px;font-weight:bold;margin-bottom:4px;">${event.name}</div>
+          <div style="color:#94a3b8;font-size:10px;">📍 ${event.city}, India</div>
+          <div style="color:#94a3b8;font-size:10px;">🖥 ${event.attackerIp}</div>
+          <div style="color:#64748b;font-size:9px;margin-top:4px;">${formatTime(event.timestamp)}</div>
+          ${isBlocked ? '<div style="color:#22c55e;font-size:9px;margin-top:4px;font-weight:bold;">✓ IP BLOCKED</div>' : ""}
+        </div>`,
+        { className: "leaflet-cyber-popup" },
+      );
+
+      marker.on("click", () => setSelectedEvent(event));
+      marker.addTo(map);
+      markersRef.current.set(event.id, marker);
     }
-  }, [events.length]);
+  }, [events, blockedIps]);
 
   const recentEvents = [...events]
     .sort(
@@ -164,10 +180,23 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
     )
     .slice(0, 8);
 
+  const isAlreadyBlocked = selectedEvent
+    ? blockedIps.some((b) => b.ip === selectedEvent.attackerIp)
+    : false;
+
+  const handleBlockIp = () => {
+    if (!selectedEvent?.attackerIp) return;
+    onBlockIp(
+      selectedEvent.attackerIp,
+      `Attack detected: ${selectedEvent.name} from ${selectedEvent.city}`,
+      currentUser?.email ?? "admin@combodefense.local",
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <div className="flex items-center gap-2 mb-1">
           <Globe size={16} className="text-cyber-cyan" />
           <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
@@ -178,7 +207,8 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
           LIVE ATTACK MAP
         </h1>
         <p className="text-xs font-mono text-muted-foreground mt-1">
-          Real-time geographic visualization of attack origins across India
+          Real-world geographic visualization of attack origins — OpenStreetMap
+          via CartoDB Dark
         </p>
       </div>
 
@@ -188,17 +218,17 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
           <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
         </span>
         <span className="text-[10px] font-mono text-red-400 tracking-widest">
-          LIVE — TRACKING {dots.length} ATTACK ORIGIN
-          {dots.length !== 1 ? "S" : ""}
+          LIVE — TRACKING {events.length} ATTACK ORIGIN
+          {events.length !== 1 ? "S" : ""}
         </span>
         <div className="ml-auto flex gap-3">
-          {["critical", "high", "medium", "low"].map((s) => (
+          {(["critical", "high", "medium", "low"] as const).map((s) => (
             <div key={s} className="flex items-center gap-1.5">
               <span
                 className="w-2 h-2 rounded-full"
                 style={{
-                  background: SEVERITY_COLORS_HEX[s],
-                  boxShadow: `0 0 6px ${SEVERITY_GLOW[s]}`,
+                  background: SEVERITY_COLORS[s],
+                  boxShadow: `0 0 6px ${SEVERITY_COLORS[s]}99`,
                 }}
               />
               <span className="text-[9px] font-mono uppercase text-muted-foreground">
@@ -210,220 +240,52 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Map */}
-        <div className="xl:col-span-2 bg-card border border-border rounded-lg overflow-hidden relative">
-          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-black/60 rounded px-2 py-1">
+        {/* Real World Map */}
+        <div
+          className="xl:col-span-2 bg-card border border-border rounded-lg overflow-hidden relative"
+          style={{ height: 480 }}
+        >
+          <div className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 bg-black/80 rounded px-2 py-1 pointer-events-none">
             <Radio size={10} className="text-cyber-cyan animate-pulse" />
             <span className="text-[9px] font-mono text-cyber-cyan">
-              SCANNING
+              LIVE TRACKING
             </span>
           </div>
 
-          <svg
-            viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-            className="w-full h-auto"
-            role="img"
-            aria-label="Live attack map of India showing attack origin locations"
-            style={{
-              background: "linear-gradient(135deg, #0a0f0a 0%, #050d0f 100%)",
-            }}
-          >
-            {/* Grid lines */}
-            {Array.from({ length: 10 }).map((_, i) => (
-              <line
-                key={`vg-${(i * SVG_W) / 10}`}
-                x1={i * (SVG_W / 10)}
-                y1={0}
-                x2={i * (SVG_W / 10)}
-                y2={SVG_H}
-                stroke="rgba(0,255,200,0.04)"
-                strokeWidth="1"
-              />
-            ))}
-            {Array.from({ length: 10 }).map((_, i) => (
-              <line
-                key={`hg-${(i * SVG_H) / 10}`}
-                x1={0}
-                y1={i * (SVG_H / 10)}
-                x2={SVG_W}
-                y2={i * (SVG_H / 10)}
-                stroke="rgba(0,255,200,0.04)"
-                strokeWidth="1"
-              />
-            ))}
+          {/* Leaflet map container */}
+          <div ref={mapRef} className="w-full h-full" />
 
-            {/* India outline */}
-            <path
-              d={INDIA_PATH}
-              fill="rgba(0,255,200,0.04)"
-              stroke="rgba(0,255,200,0.25)"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-
-            {/* City background dots */}
-            {Object.entries(CITY_COORDS).map(([city, coord]) => {
-              const { x, y } = latLonToSvg(coord.lat, coord.lon);
-              return (
-                <circle
-                  key={city}
-                  cx={x}
-                  cy={y}
-                  r={1.5}
-                  fill="rgba(0,255,200,0.15)"
-                />
-              );
-            })}
-
-            {/* City labels */}
-            {Object.entries(CITY_COORDS).map(([city, coord]) => {
-              const { x, y } = latLonToSvg(coord.lat, coord.lon);
-              const hasDot = dots.some((d) => d.city === city);
-              if (!hasDot) return null;
-              return (
-                <text
-                  key={`lbl-${city}`}
-                  x={x + 6}
-                  y={y + 3}
-                  fontSize="6"
-                  fontFamily="monospace"
-                  fill="rgba(0,255,200,0.5)"
-                >
-                  {city}
-                </text>
-              );
-            })}
-
-            {/* Attack dots */}
-            {dots.map((dot) => {
-              const color = SEVERITY_COLORS_HEX[dot.severity] ?? "#888";
-              const glow = SEVERITY_GLOW[dot.severity] ?? "transparent";
-              const isSelected = selected?.id === dot.id;
-              const isHovered = hovered === dot.id;
-              return (
-                <g
-                  key={dot.id}
-                  style={{ cursor: "pointer" }}
-                  // biome-ignore lint/a11y/useSemanticElements: SVG g element
-                  tabIndex={0}
-                  aria-label={`Attack from ${dot.city}: ${dot.name}`}
-                  onClick={() => setSelected(isSelected ? null : dot)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
-                      setSelected(isSelected ? null : dot);
-                  }}
-                  onMouseEnter={() => setHovered(dot.id)}
-                  onMouseLeave={() => setHovered(null)}
-                >
-                  {/* Ripple rings */}
-                  <circle
-                    cx={dot.x}
-                    cy={dot.y}
-                    r={isSelected || isHovered ? 18 : 14}
-                    fill="none"
-                    stroke={color}
-                    strokeOpacity="0.12"
-                    strokeWidth="1"
-                  >
-                    <animate
-                      attributeName="r"
-                      values={`6;${isSelected ? 22 : 18};6`}
-                      dur="2s"
-                      repeatCount="indefinite"
-                    />
-                    <animate
-                      attributeName="stroke-opacity"
-                      values="0.4;0;0.4"
-                      dur="2s"
-                      repeatCount="indefinite"
-                    />
-                  </circle>
-                  <circle
-                    cx={dot.x}
-                    cy={dot.y}
-                    r={isSelected || isHovered ? 12 : 9}
-                    fill="none"
-                    stroke={color}
-                    strokeOpacity="0.25"
-                    strokeWidth="1"
-                  >
-                    <animate
-                      attributeName="r"
-                      values={`3;${isSelected ? 14 : 11};3`}
-                      dur="2s"
-                      begin="0.5s"
-                      repeatCount="indefinite"
-                    />
-                    <animate
-                      attributeName="stroke-opacity"
-                      values="0.6;0;0.6"
-                      dur="2s"
-                      begin="0.5s"
-                      repeatCount="indefinite"
-                    />
-                  </circle>
-                  {/* Core dot */}
-                  <circle
-                    cx={dot.x}
-                    cy={dot.y}
-                    r={isSelected ? 5 : 3.5}
-                    fill={color}
-                    style={{ filter: `drop-shadow(0 0 4px ${glow})` }}
-                  />
-                  {/* Crosshair on selected */}
-                  {isSelected && (
-                    <>
-                      <line
-                        x1={dot.x - 10}
-                        y1={dot.y}
-                        x2={dot.x + 10}
-                        y2={dot.y}
-                        stroke={color}
-                        strokeWidth="0.8"
-                        strokeOpacity="0.6"
-                      />
-                      <line
-                        x1={dot.x}
-                        y1={dot.y - 10}
-                        x2={dot.x}
-                        y2={dot.y + 10}
-                        stroke={color}
-                        strokeWidth="0.8"
-                        strokeOpacity="0.6"
-                      />
-                    </>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-
-          {/* Selected tooltip */}
-          {selected && (
-            <div className="absolute bottom-4 left-4 right-4 bg-black/90 border border-cyber-cyan/40 rounded-lg p-3">
+          {/* Selected event detail overlay */}
+          {selectedEvent && (
+            <div className="absolute bottom-4 left-4 right-4 z-[1000] bg-black/90 border border-cyber-cyan/40 rounded-lg p-3">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span
                       className="text-[9px] font-mono border rounded px-1.5 py-0.5"
                       style={{
-                        color: SEVERITY_COLORS_HEX[selected.severity],
-                        borderColor: `${SEVERITY_COLORS_HEX[selected.severity]}66`,
+                        color: SEVERITY_COLORS[selectedEvent.severity],
+                        borderColor: `${SEVERITY_COLORS[selectedEvent.severity]}66`,
                       }}
                     >
-                      {selected.severity.toUpperCase()}
+                      {selectedEvent.severity.toUpperCase()}
                     </span>
                     <span className="text-xs font-mono font-bold text-foreground">
-                      {selected.name}
+                      {selectedEvent.name}
                     </span>
+                    {isAlreadyBlocked && (
+                      <span className="text-[9px] font-mono border border-green-500/50 text-green-400 rounded px-1.5 py-0.5">
+                        ✓ IP BLOCKED
+                      </span>
+                    )}
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-3 mb-2">
                     <div>
                       <p className="text-[8px] font-mono text-muted-foreground">
                         IP
                       </p>
                       <p className="text-[10px] font-mono text-cyber-cyan">
-                        {selected.attackerIp}
+                        {selectedEvent.attackerIp}
                       </p>
                     </div>
                     <div>
@@ -431,7 +293,7 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
                         CITY
                       </p>
                       <p className="text-[10px] font-mono text-orange-400">
-                        {selected.city}, IN
+                        {selectedEvent.city}, IN
                       </p>
                     </div>
                     <div>
@@ -439,14 +301,29 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
                         TIME
                       </p>
                       <p className="text-[10px] font-mono text-muted-foreground">
-                        {formatTime(selected.timestamp)}
+                        {formatTime(selectedEvent.timestamp)}
                       </p>
                     </div>
                   </div>
+                  {!isAlreadyBlocked ? (
+                    <button
+                      type="button"
+                      onClick={handleBlockIp}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-mono font-bold border border-red-500/60 text-red-400 hover:bg-red-500/10 transition-colors tracking-widest"
+                    >
+                      <Shield size={10} />
+                      BLOCK IP
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-[10px] font-mono text-green-400">
+                      <Shield size={10} />
+                      IP ALREADY BLOCKED
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelected(null)}
+                  onClick={() => setSelectedEvent(null)}
                   className="text-muted-foreground hover:text-foreground text-xs"
                 >
                   ✕
@@ -460,11 +337,11 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
         <div className="space-y-3">
           {/* Stats */}
           <div className="grid grid-cols-2 gap-2">
-            {["critical", "high", "medium", "low"].map((s) => (
+            {(["critical", "high", "medium", "low"] as const).map((s) => (
               <div key={s} className="bg-card border border-border rounded p-3">
                 <p
                   className="text-xl font-mono font-bold"
-                  style={{ color: SEVERITY_COLORS_HEX[s] }}
+                  style={{ color: SEVERITY_COLORS[s] }}
                 >
                   {events.filter((e) => e.severity === s).length}
                 </p>
@@ -491,37 +368,46 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
                   </p>
                 </div>
               ) : (
-                recentEvents.map((e, i) => (
-                  <div
-                    key={e.id}
-                    className={`px-3 py-2 flex gap-2 items-start ${i === 0 ? "bg-red-950/10" : ""}`}
-                  >
-                    <span
-                      className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{
-                        background: SEVERITY_COLORS_HEX[e.severity],
-                        boxShadow: `0 0 4px ${SEVERITY_GLOW[e.severity]}`,
-                      }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-mono text-foreground truncate">
-                        {e.name}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <MapPin
-                          size={8}
-                          className="text-muted-foreground flex-shrink-0"
-                        />
-                        <p className="text-[9px] font-mono text-orange-400 truncate">
-                          {e.city}
+                recentEvents.map((e, i) => {
+                  const blocked = blockedIps.some((b) => b.ip === e.attackerIp);
+                  return (
+                    <button
+                      type="button"
+                      key={e.id}
+                      className={`w-full px-3 py-2 flex gap-2 items-start text-left hover:bg-secondary/20 transition-colors ${
+                        i === 0 ? "bg-red-950/10" : ""
+                      }`}
+                      onClick={() => setSelectedEvent(e)}
+                    >
+                      <span
+                        className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ background: SEVERITY_COLORS[e.severity] }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-mono text-foreground truncate">
+                          {e.name}
                         </p>
-                        <p className="text-[9px] font-mono text-muted-foreground ml-auto flex-shrink-0">
-                          {formatTime(e.timestamp)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <MapPin
+                            size={8}
+                            className="text-muted-foreground flex-shrink-0"
+                          />
+                          <p className="text-[9px] font-mono text-orange-400 truncate">
+                            {e.city}
+                          </p>
+                          {blocked && (
+                            <span className="text-[8px] font-mono text-green-400">
+                              BLOCKED
+                            </span>
+                          )}
+                          <p className="text-[9px] font-mono text-muted-foreground ml-auto flex-shrink-0">
+                            {formatTime(e.timestamp)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -572,6 +458,31 @@ export default function LiveAttackMapPage({ events }: LiveAttackMapPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Leaflet popup styles override */}
+      <style>{`
+        .leaflet-cyber-popup .leaflet-popup-content-wrapper {
+          background: transparent;
+          border: none;
+          box-shadow: none;
+          padding: 0;
+        }
+        .leaflet-cyber-popup .leaflet-popup-content {
+          margin: 0;
+        }
+        .leaflet-cyber-popup .leaflet-popup-tip-container {
+          display: none;
+        }
+        .leaflet-control-zoom a {
+          background: rgba(0,0,0,0.8) !important;
+          color: rgba(0,255,200,0.8) !important;
+          border-color: rgba(0,255,200,0.2) !important;
+        }
+        .leaflet-control-zoom a:hover {
+          background: rgba(0,30,20,0.9) !important;
+          color: rgba(0,255,200,1) !important;
+        }
+      `}</style>
     </div>
   );
 }

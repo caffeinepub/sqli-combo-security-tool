@@ -26,11 +26,13 @@ import ScanPage from "./pages/ScanPage";
 import SecurityLogoPage from "./pages/SecurityLogoPage";
 import SqliGuardLogoPage from "./pages/SqliGuardLogoPage";
 import UsersPage from "./pages/UsersPage";
+import WafPage from "./pages/WafPage";
 import type {
   ActivityEntry,
   Alert,
   AlertStatus,
   AttackEvent,
+  BlockedIp,
   Page,
   PreventionTask,
   ScannerEvent,
@@ -68,6 +70,7 @@ export default function App() {
   const [scannerEvents, setScannerEvents] = useState<ScannerEvent[]>([]);
   const [attackMode, setAttackMode] = useState<"auto" | "manual">("auto");
   const [attackEvents, setAttackEvents] = useState<AttackEvent[]>([]);
+  const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
 
   const addAttackEvent = useCallback(
     (event: Omit<AttackEvent, "id" | "timestamp">) => {
@@ -94,6 +97,39 @@ export default function App() {
       },
     ]);
   }, []);
+
+  const handleBlockIp = useCallback(
+    (ip: string, reason: string, blockedBy: string) => {
+      setBlockedIps((prev) => {
+        if (prev.some((b) => b.ip === ip)) return prev;
+        return [
+          ...prev,
+          {
+            id: `blk-${Date.now()}`,
+            ip,
+            reason,
+            blockedAt: new Date().toISOString(),
+            blockedBy,
+          },
+        ];
+      });
+      addActivity(`IP BLOCKED: ${ip} — ${reason}`, blockedBy);
+      toast.success(`IP ${ip} blocked successfully`, { duration: 3000 });
+    },
+    [addActivity],
+  );
+
+  const handleUnblockIp = useCallback(
+    (id: string) => {
+      setBlockedIps((prev) => {
+        const entry = prev.find((b) => b.id === id);
+        if (entry)
+          addActivity(`IP UNBLOCKED: ${entry.ip}`, user?.email ?? "admin");
+        return prev.filter((b) => b.id !== id);
+      });
+    },
+    [addActivity, user],
+  );
 
   const handleLogin = useCallback(
     (email: string, password: string): boolean => {
@@ -229,6 +265,7 @@ export default function App() {
           name: scenarioName,
           severity: scenarioId === "sqli" ? "critical" : "high",
           signal: meta.attackType,
+          attackerIp: meta.hackerIp,
         });
       }
       toast.error(`Attack replay: ${scenarioName}`, { duration: 3000 });
@@ -408,6 +445,9 @@ export default function App() {
           <DetectPage
             alerts={alerts}
             onUpdateStatus={handleUpdateAlertStatus}
+            blockedIps={blockedIps}
+            onBlockIp={handleBlockIp}
+            currentUserEmail={user.email}
           />
         );
       case "prevent":
@@ -426,12 +466,23 @@ export default function App() {
             alerts={alerts}
           />
         );
+      case "waf":
+        return (
+          <WafPage blockedIps={blockedIps} onUnblockIp={handleUnblockIp} />
+        );
       case "activity":
         return <ActivityPage activity={activity} />;
       case "timeline":
         return <AttackTimelinePage events={attackEvents} />;
       case "map":
-        return <LiveAttackMapPage events={attackEvents} />;
+        return (
+          <LiveAttackMapPage
+            events={attackEvents}
+            blockedIps={blockedIps}
+            onBlockIp={handleBlockIp}
+            currentUser={user}
+          />
+        );
       default:
         return null;
     }
@@ -450,6 +501,9 @@ export default function App() {
       <AttackAlertPopup
         attack={attackPopup}
         onDismiss={() => setAttackPopup(null)}
+        blockedIps={blockedIps}
+        onBlockIp={handleBlockIp}
+        currentUserEmail={user.email}
       />
       {user.role === "analyst" && (
         <AnalystDefendedNotification

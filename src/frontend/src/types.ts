@@ -8,7 +8,8 @@ export type Page =
   | "activity"
   | "users"
   | "timeline"
-  | "map";
+  | "map"
+  | "waf";
 
 export type Role =
   | "admin"
@@ -99,4 +100,12 @@ export interface AttackEvent {
   attackerIp: string;
   attackType: string;
   source: "auto" | "manual" | "replay";
+}
+
+export interface BlockedIp {
+  id: string;
+  ip: string;
+  reason: string;
+  blockedAt: string;
+  blockedBy: string;
 }

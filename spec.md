@@ -1,30 +1,42 @@
-# SQLi Combo Defense Console
+# SQLi Combo Security Tool
 
 ## Current State
-AttackPage renders cards from `ATTACK_SCENARIOS` array in `data.ts`. Currently 10 attack scenarios: SQLi, XSS, Session Hijack, Rate-Limit Bypass, CSRF, Command Injection, Directory Traversal, MITM, DNS Spoofing, Buffer Overflow.
-
-PreventPage renders collapsible guide cards from `PREVENTION_GUIDES` array in `data.ts`. Currently 6 guides for the newer attack types (CSRF, Command Injection, Directory Traversal, MITM, DNS Spoofing, Buffer Overflow).
-
-`SCENARIO_META` in `data.ts` maps scenario names to hacker IP, attack type, and reattack loop for popup alerts.
+- Full cyberpunk cybersecurity training platform with Attack, Detect, Prevent, Dashboard, Users, Reports, Timeline, and Live Attack Map pages.
+- Live Attack Map uses a hand-drawn SVG India outline with hardcoded paths — not a real geographic map.
+- No WAF (Web Application Firewall) management page exists.
+- No IP blocking functionality when attacks are detected.
+- Attack popups and Detect modal show attacker IP but have no way to block it.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Script Injection attack** in `ATTACK_SCENARIOS` -- a distinct attack from XSS, focusing on inline script execution via event handlers and javascript: URIs in DOM contexts, not just `<script>` tags. Severity: high.
-- **Forced Login attack** (credential stuffing / authentication bypass) in `ATTACK_SCENARIOS` -- distinct from Brute Force, uses breached credential databases and account enumeration. Severity: critical.
-- **Scenario metadata** for both new attacks in `SCENARIO_META` (hackerIp, attackType, reattackLoop).
-- **Prevention guide for Script Injection** in `PREVENTION_GUIDES` with attack vector description, 4 mitigation steps, code example, OWASP A03:2021, NIST SP 800-53: SI-10, SI-15 references.
-- **Prevention guide for Forced Login** in `PREVENTION_GUIDES` with attack vector description, 4 mitigation steps, code example, OWASP A07:2021, NIST SP 800-53: AC-2, IA-5 references.
+- **Real World Map**: Replace the custom SVG India outline in LiveAttackMapPage with a Leaflet-based real-world tile map. Attack dots show as pulsing markers at accurate lat/lon coordinates for each Indian city. Clicking a marker shows a popup with attack details.
+- **WAF (Secure Web Application Firewall) Tab**: New "WAF" tab in the Sidebar (admin/co-admin only). New `WafPage` showing: firewall status toggle (ON/OFF), active WAF rules list (SQLi, XSS, CSRF, RCE, etc.), blocked requests log, and blocked IP list. All simulated/demo data.
+- **IP Blocking**: 
+  - New `blockedIps` state array in App.tsx.
+  - `handleBlockIp(ip)` function that adds an IP to the blocked list and logs the action.
+  - "BLOCK IP" button on the AttackAlertPopup (when attackerIp is present).
+  - "BLOCK IP" button in the DetectPage Threat Intelligence modal.
+  - Blocked IPs are passed to WafPage to display in the blocked IP list.
+  - Visual indicator in AttackAlertPopup/DetectModal if IP is already blocked.
 
 ### Modify
-- Nothing (purely additive)
+- `LiveAttackMapPage.tsx`: Replace SVG map with Leaflet real-world map using OpenStreetMap tiles. Keep the side panels (stats, recent attacks, top cities) unchanged.
+- `App.tsx`: Add `blockedIps` state, `handleBlockIp` function, pass to AttackAlertPopup, DetectPage, and WafPage.
+- `AttackAlertPopup.tsx`: Add "BLOCK IP" button when `attackerIp` is present. Show "ALREADY BLOCKED" if IP is in blockedIps.
+- `DetectPage.tsx`: Add "BLOCK IP" button in the Threat Intelligence modal. Pass blockedIps and onBlockIp props.
+- `Sidebar.tsx`: Add "WAF" nav item for admin/co-admin.
+- `types.ts`: Add `"waf"` to the `Page` union type. Add `BlockedIp` interface.
 
 ### Remove
-- Nothing
+- Nothing. All existing features remain unchanged.
 
 ## Implementation Plan
-1. Add two new `AttackScenario` objects to `ATTACK_SCENARIOS` in `src/frontend/src/data.ts`.
-2. Add two new entries to `SCENARIO_META` in `data.ts`.
-3. Add two new `PreventionGuide` objects to `PREVENTION_GUIDES` in `data.ts`.
-4. No page file changes needed -- both arrays are already wired up to render cards automatically.
-5. Run lint + typecheck + build to verify no regressions.
+1. Install `leaflet` and `react-leaflet` packages, add Leaflet CSS import.
+2. Update `types.ts` — add `"waf"` page, `BlockedIp` interface.
+3. Rewrite `LiveAttackMapPage.tsx` using `MapContainer`, `TileLayer`, `CircleMarker`, `Popup` from react-leaflet.
+4. Create `WafPage.tsx` with firewall status, rules, blocked requests log, and blocked IPs panel.
+5. Update `AttackAlertPopup.tsx` to accept `blockedIps` and `onBlockIp` props, show BLOCK IP button.
+6. Update `DetectPage.tsx` to accept `blockedIps` and `onBlockIp` props, show BLOCK IP in modal.
+7. Update `App.tsx` — add blockedIps state, handleBlockIp, wire WAF page, pass new props.
+8. Update `Sidebar.tsx` — add WAF nav item for admin/co-admin role.

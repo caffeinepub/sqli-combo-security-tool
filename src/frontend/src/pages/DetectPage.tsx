@@ -1,9 +1,13 @@
+import { Ban } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Alert, AlertStatus, Severity } from "../types";
+import type { Alert, AlertStatus, BlockedIp, Severity } from "../types";
 
 interface DetectPageProps {
   alerts: Alert[];
   onUpdateStatus: (alertId: string, status: AlertStatus) => void;
+  blockedIps?: BlockedIp[];
+  onBlockIp?: (ip: string, reason: string, blockedBy: string) => void;
+  currentUserEmail?: string;
 }
 
 type FilterTab = "all" | AlertStatus;
@@ -119,7 +123,6 @@ function MLClassificationPanel({ alert }: { alert: Alert }) {
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
-      // Animate bar in
       const t = setTimeout(() => setBarWidth(score), 80);
       return () => clearTimeout(t);
     }
@@ -153,8 +156,6 @@ function MLClassificationPanel({ alert }: { alert: Alert }) {
       <p className="text-[10px] font-mono text-purple-400/80 uppercase tracking-widest mb-2">
         ML CLASSIFICATION (TF-IDF + XGBoost)
       </p>
-
-      {/* XGBoost confidence */}
       <div className="mb-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-mono text-muted-foreground">
@@ -174,15 +175,10 @@ function MLClassificationPanel({ alert }: { alert: Alert }) {
         <div className="w-full h-1.5 rounded bg-secondary overflow-hidden">
           <div
             className="h-full rounded transition-all duration-700"
-            style={{
-              width: `${barWidth}%`,
-              background: barColor,
-            }}
+            style={{ width: `${barWidth}%`, background: barColor }}
           />
         </div>
       </div>
-
-      {/* TF-IDF keywords */}
       <p className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-widest mb-1.5">
         TF-IDF Signal Keywords
       </p>
@@ -207,12 +203,20 @@ function AlertDetailModal({
   action,
   onClose,
   onUpdateStatus,
+  blockedIps = [],
+  onBlockIp,
+  currentUserEmail = "admin@combodefense.local",
 }: {
   alert: Alert;
   action: AlertStatus;
   onClose: () => void;
   onUpdateStatus: (alertId: string, status: AlertStatus) => void;
+  blockedIps?: BlockedIp[];
+  onBlockIp?: (ip: string, reason: string, blockedBy: string) => void;
+  currentUserEmail?: string;
 }) {
+  const [justBlocked, setJustBlocked] = useState(false);
+
   const actionLabel =
     action === "open" ? "OPEN" : action === "investigating" ? "INV" : "RES";
   const actionColor =
@@ -225,6 +229,19 @@ function AlertDetailModal({
   const handleConfirm = () => {
     onUpdateStatus(alert.id, action);
     onClose();
+  };
+
+  const isAlreadyBlocked =
+    alert.hackerIp != null && blockedIps.some((b) => b.ip === alert.hackerIp);
+
+  const handleBlockIp = () => {
+    if (!alert.hackerIp || !onBlockIp) return;
+    onBlockIp(
+      alert.hackerIp,
+      `Alert: ${alert.scenarioName} — ${alert.attackType ?? alert.scenarioName}`,
+      currentUserEmail,
+    );
+    setJustBlocked(true);
   };
 
   const reattackSteps = alert.reattackLoop ?? [
@@ -264,7 +281,7 @@ function AlertDetailModal({
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Scenario + severity */}
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -291,17 +308,42 @@ function AlertDetailModal({
             </p>
           </div>
 
-          {/* Hacker IP */}
+          {/* Hacker IP + Block button */}
           <div className="bg-cyber-orange/5 border border-cyber-orange/20 rounded p-3">
             <p className="text-[10px] font-mono text-cyber-orange/70 uppercase tracking-widest mb-1">
               Source IP Address
             </p>
-            <p className="text-sm font-mono text-cyber-orange font-bold tracking-wider">
-              {alert.hackerIp ?? "UNKNOWN"}
-            </p>
-            <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-              Geolocation: Eastern Europe / TOR exit node suspected
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-mono text-cyber-orange font-bold tracking-wider">
+                  {alert.hackerIp ?? "UNKNOWN"}
+                </p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                  Geolocation: Eastern Europe / TOR exit node suspected
+                </p>
+              </div>
+              {alert.hackerIp && onBlockIp && (
+                <div className="shrink-0">
+                  {isAlreadyBlocked || justBlocked ? (
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-green-500/30 bg-green-500/5">
+                      <Ban size={10} className="text-green-400" />
+                      <span className="text-[9px] font-mono text-green-400 font-bold">
+                        BLOCKED
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleBlockIp}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-red-500/50 text-red-400 font-mono text-[9px] font-bold tracking-widest hover:bg-red-500/10 transition-colors"
+                    >
+                      <Ban size={10} />
+                      BLOCK IP
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Signal */}
@@ -370,6 +412,9 @@ function AlertDetailModal({
 export default function DetectPage({
   alerts,
   onUpdateStatus,
+  blockedIps = [],
+  onBlockIp,
+  currentUserEmail,
 }: DetectPageProps) {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [modal, setModal] = useState<{
@@ -453,54 +498,69 @@ export default function DetectPage({
                 </td>
               </tr>
             )}
-            {filtered.map((alert, idx) => (
-              <tr
-                key={alert.id}
-                data-ocid={`detect.alert.item.${idx + 1}`}
-                className="border-b border-border/50 hover:bg-secondary/20 transition-colors"
-              >
-                <td className="px-4 py-3 text-xs font-mono text-foreground">
-                  {alert.scenarioName}
-                </td>
-                <td className="px-4 py-3">
-                  <SeverityBadge severity={alert.severity} />
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={alert.status} />
-                </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
-                  {alert.signal}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      data-ocid={`detect.open.button.${idx + 1}`}
-                      onClick={() => openModal(alert, "open")}
-                      className="px-2 py-1 rounded text-[10px] font-mono border border-cyber-red/40 text-cyber-red hover:bg-cyber-red/10 transition-colors"
-                    >
-                      OPEN
-                    </button>
-                    <button
-                      type="button"
-                      data-ocid={`detect.investigating.button.${idx + 1}`}
-                      onClick={() => openModal(alert, "investigating")}
-                      className="px-2 py-1 rounded text-[10px] font-mono border border-cyber-yellow/40 text-cyber-yellow hover:bg-cyber-yellow/10 transition-colors"
-                    >
-                      INV
-                    </button>
-                    <button
-                      type="button"
-                      data-ocid={`detect.resolved.button.${idx + 1}`}
-                      onClick={() => openModal(alert, "resolved")}
-                      className="px-2 py-1 rounded text-[10px] font-mono border border-cyber-green/40 text-cyber-green hover:bg-cyber-green/10 transition-colors"
-                    >
-                      RES
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((alert, idx) => {
+              const isBlocked =
+                alert.hackerIp != null &&
+                blockedIps.some((b) => b.ip === alert.hackerIp);
+              return (
+                <tr
+                  key={alert.id}
+                  data-ocid={`detect.alert.item.${idx + 1}`}
+                  className="border-b border-border/50 hover:bg-secondary/20 transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-foreground">
+                        {alert.scenarioName}
+                      </span>
+                      {isBlocked && (
+                        <span className="flex items-center gap-1 text-[9px] font-mono text-green-400 border border-green-500/30 rounded px-1 py-0.5">
+                          <Ban size={8} />
+                          BLOCKED
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <SeverityBadge severity={alert.severity} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={alert.status} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
+                    {alert.signal}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        data-ocid={`detect.open.button.${idx + 1}`}
+                        onClick={() => openModal(alert, "open")}
+                        className="px-2 py-1 rounded text-[10px] font-mono border border-cyber-red/40 text-cyber-red hover:bg-cyber-red/10 transition-colors"
+                      >
+                        OPEN
+                      </button>
+                      <button
+                        type="button"
+                        data-ocid={`detect.investigating.button.${idx + 1}`}
+                        onClick={() => openModal(alert, "investigating")}
+                        className="px-2 py-1 rounded text-[10px] font-mono border border-cyber-yellow/40 text-cyber-yellow hover:bg-cyber-yellow/10 transition-colors"
+                      >
+                        INV
+                      </button>
+                      <button
+                        type="button"
+                        data-ocid={`detect.resolved.button.${idx + 1}`}
+                        onClick={() => openModal(alert, "resolved")}
+                        className="px-2 py-1 rounded text-[10px] font-mono border border-cyber-green/40 text-cyber-green hover:bg-cyber-green/10 transition-colors"
+                      >
+                        RES
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -512,6 +572,9 @@ export default function DetectPage({
           action={modal.action}
           onClose={() => setModal(null)}
           onUpdateStatus={onUpdateStatus}
+          blockedIps={blockedIps}
+          onBlockIp={onBlockIp}
+          currentUserEmail={currentUserEmail}
         />
       )}
     </div>
