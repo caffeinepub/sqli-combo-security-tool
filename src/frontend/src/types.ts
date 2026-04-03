@@ -31,6 +31,7 @@ export interface User {
 
 export type Severity = "critical" | "high" | "medium" | "low";
 export type AlertStatus = "open" | "investigating" | "resolved";
+export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface Alert {
   id: string;
@@ -70,6 +71,7 @@ export interface AttackScenario {
   description: string;
   steps: string[];
   prevention: string;
+  obfuscatedPayload?: string;
 }
 
 export interface ScannerEvent {
@@ -111,4 +113,35 @@ export interface BlockedIp {
   reason: string;
   blockedAt: string;
   blockedBy: string;
+}
+
+export interface RetrainingCase {
+  id: string;
+  alertId: string;
+  payload: string;
+  label: "FP" | "FN";
+  timestamp: Date;
+  attackType: string;
+}
+
+export interface HoneypotLog {
+  id: string;
+  ip: string;
+  payload: string;
+  endpoint: string;
+  timestamp: Date;
+  autoFlagged: boolean;
+}
+
+export interface IpStats {
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+  riskScore: number;
+}
+
+export interface EnsembleScore {
+  xgboost: number;
+  svm: number;
+  ensemble: number;
 }

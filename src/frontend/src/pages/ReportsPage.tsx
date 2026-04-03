@@ -34,6 +34,22 @@ const getMlScore = (id: string, severity: string) => {
   return 40 + (last % 25);
 };
 
+const getRiskScore = (id: string, severity: string) => {
+  const base =
+    severity === "critical"
+      ? 90
+      : severity === "high"
+        ? 70
+        : severity === "medium"
+          ? 40
+          : 15;
+  const bonus = id.charCodeAt(0) % 15;
+  return Math.min(100, base + bonus);
+};
+
+const getRiskLabel = (score: number) =>
+  score > 75 ? "CRITICAL" : score > 50 ? "HIGH" : score > 25 ? "MEDIUM" : "LOW";
+
 export default function ReportsPage({
   threatLevel,
   preventionCoverage,
@@ -115,28 +131,33 @@ ${recommendations.map((r) => `• ${r}`).join("\n")}`;
   };
 
   const buildRows = (data: Alert[]) =>
-    data.map((a) => ({
-      timestamp: new Date(a.timestamp).toLocaleString(),
-      attackType: a.attackType ?? a.scenarioName,
-      ip:
-        a.hackerIp ??
-        `192.168.${a.id.charCodeAt(0) % 255}.${a.id.charCodeAt(1) % 255}`,
-      city: getCityFromId(a.id),
-      status: a.status.toUpperCase(),
-      triggeredBy: "admin",
-      resolvedBy: a.status === "resolved" ? "analyst" : "-",
-      mlScore: `${getMlScore(a.id, a.severity)}%`,
-      severity: a.severity,
-    }));
+    data.map((a) => {
+      const rs = getRiskScore(a.id, a.severity);
+      return {
+        timestamp: new Date(a.timestamp).toLocaleString(),
+        attackType: a.attackType ?? a.scenarioName,
+        ip:
+          a.hackerIp ??
+          `192.168.${a.id.charCodeAt(0) % 255}.${a.id.charCodeAt(1) % 255}`,
+        city: getCityFromId(a.id),
+        status: a.status.toUpperCase(),
+        triggeredBy: "admin",
+        resolvedBy: a.status === "resolved" ? "analyst" : "-",
+        mlScore: `${getMlScore(a.id, a.severity)}%`,
+        riskScore: rs,
+        riskLabel: getRiskLabel(rs),
+        severity: a.severity,
+      };
+    });
 
   const downloadCsv = () => {
     const rows = buildRows(filteredAlerts);
     const header =
-      "TIMESTAMP,ATTACK TYPE,ATTACKER IP,CITY,STATUS,TRIGGERED BY,RESOLVED BY,ML SCORE\n";
+      "TIMESTAMP,ATTACK TYPE,ATTACKER IP,CITY,STATUS,TRIGGERED BY,RESOLVED BY,ML SCORE,RISK SCORE,RISK LEVEL\n";
     const body = rows
       .map(
         (r) =>
-          `"${r.timestamp}","${r.attackType}","${r.ip}","${r.city}","${r.status}","${r.triggeredBy}","${r.resolvedBy}","${r.mlScore}"`,
+          `"${r.timestamp}","${r.attackType}","${r.ip}","${r.city}","${r.status}","${r.triggeredBy}","${r.resolvedBy}","${r.mlScore}","${r.riskScore}","${r.riskLabel}"`,
       )
       .join("\n");
     const blob = new Blob([header + body], { type: "text/csv" });
@@ -698,6 +719,7 @@ ${recommendations.map((r) => `• ${r}`).join("\n")}`;
                   "TRIGGERED BY",
                   "RESOLVED BY",
                   "ML SCORE",
+                  "RISK SCORE",
                 ].map((col) => (
                   <th
                     key={col}
@@ -712,7 +734,7 @@ ${recommendations.map((r) => `• ${r}`).join("\n")}`;
               {previewRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="py-4 text-center text-muted-foreground"
                     data-ocid="reports.table.empty_state"
                   >
@@ -753,6 +775,21 @@ ${recommendations.map((r) => `• ${r}`).join("\n")}`;
                     </td>
                     <td className="py-2 pr-4">
                       <span className="text-cyber-green">{row.mlScore}</span>
+                    </td>
+                    <td className="py-2 pr-4">
+                      <span
+                        className={
+                          row.riskScore > 75
+                            ? "text-[9px] font-mono text-red-400 border border-red-400/40 rounded px-1 py-0.5"
+                            : row.riskScore > 50
+                              ? "text-[9px] font-mono text-orange-400 border border-orange-400/40 rounded px-1 py-0.5"
+                              : row.riskScore > 25
+                                ? "text-[9px] font-mono text-yellow-400 border border-yellow-400/40 rounded px-1 py-0.5"
+                                : "text-[9px] font-mono text-green-400 border border-green-400/40 rounded px-1 py-0.5"
+                        }
+                      >
+                        {row.riskLabel}
+                      </span>
                     </td>
                   </tr>
                 ))

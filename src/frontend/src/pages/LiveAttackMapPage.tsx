@@ -10,13 +10,14 @@ import {
 } from "lucide-react";
 import { Suspense, useRef, useState } from "react";
 import * as THREE from "three";
-import type { AttackEvent, BlockedIp } from "../types";
+import type { AttackEvent, BlockedIp, IpStats } from "../types";
 
 interface LiveAttackMapPageProps {
   events: AttackEvent[];
   blockedIps: BlockedIp[];
   onBlockIp: (ip: string, reason: string, blockedBy: string) => void;
   currentUser?: { name: string; email: string };
+  ipAttackCounts?: Record<string, IpStats>;
 }
 
 const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
@@ -488,6 +489,7 @@ export default function LiveAttackMapPage({
   blockedIps,
   onBlockIp,
   currentUser,
+  ipAttackCounts: _ipAttackCounts = {},
 }: LiveAttackMapPageProps) {
   const [selectedEvent, setSelectedEvent] = useState<AttackEvent | null>(null);
 

@@ -8,6 +8,7 @@ import Sidebar from "./components/Sidebar";
 import {
   INITIAL_ACTIVITY,
   INITIAL_ALERTS,
+  INITIAL_HONEYPOT_LOGS,
   INITIAL_PREVENTION_TASKS,
   generateAutoAttack,
   generateInitialThreatTrend,
@@ -34,8 +35,11 @@ import type {
   AlertStatus,
   AttackEvent,
   BlockedIp,
+  HoneypotLog,
+  IpStats,
   Page,
   PreventionTask,
+  RetrainingCase,
   ScannerEvent,
   ThreatPoint,
   User,
@@ -74,8 +78,43 @@ export default function App() {
   const [attackEvents, setAttackEvents] = useState<AttackEvent[]>([]);
   const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
 
+  // ── New AI/ML state ──
+  const [retrainingQueue, setRetrainingQueue] = useState<RetrainingCase[]>([]);
+  const [honeypotLogs, setHoneypotLogs] = useState<HoneypotLog[]>(
+    INITIAL_HONEYPOT_LOGS,
+  );
+  const [ipAttackCounts, setIpAttackCounts] = useState<Record<string, IpStats>>(
+    {},
+  );
+  const [modelVersion, setModelVersion] = useState("v1.0.0");
+  const [isRetraining, setIsRetraining] = useState(false);
+
+  const incrementIpCount = useCallback((ip: string) => {
+    setIpAttackCounts((prev) => {
+      const existing = prev[ip];
+      const now = new Date().toISOString();
+      const count = (existing?.count ?? 0) + 1;
+      const riskScore = Math.min(
+        100,
+        count * 8 + (count >= 10 ? 20 : count >= 3 ? 10 : 0),
+      );
+      return {
+        ...prev,
+        [ip]: {
+          count,
+          firstSeen: existing?.firstSeen ?? now,
+          lastSeen: now,
+          riskScore,
+        },
+      };
+    });
+  }, []);
+
   const addAttackEvent = useCallback(
     (event: Omit<AttackEvent, "id" | "timestamp">) => {
+      if (event.attackerIp) {
+        incrementIpCount(event.attackerIp);
+      }
       setAttackEvents((prev) => [
         ...prev,
         {
@@ -85,7 +124,7 @@ export default function App() {
         },
       ]);
     },
-    [],
+    [incrementIpCount],
   );
 
   const addActivity = useCallback((action: string, actor: string) => {
@@ -132,6 +171,81 @@ export default function App() {
     },
     [addActivity, user],
   );
+
+  // ── Mark False Positive / False Negative ──
+  const handleMarkFalseLabel = useCallback(
+    (alertId: string, label: "FP" | "FN") => {
+      const alert = alerts.find((a) => a.id === alertId);
+      if (!alert) return;
+      const newCase: RetrainingCase = {
+        id: `rt-${Date.now()}`,
+        alertId,
+        payload: alert.signal,
+        label,
+        timestamp: new Date(),
+        attackType: alert.attackType ?? alert.scenarioName,
+      };
+      setRetrainingQueue((prev) => [...prev, newCase]);
+      addActivity(
+        `Alert ${alertId} marked as ${label === "FP" ? "FALSE POSITIVE" : "FALSE NEGATIVE"} for retraining`,
+        user?.email ?? "system",
+      );
+      toast.success(`Marked as ${label} — added to retraining queue`, {
+        duration: 3000,
+      });
+    },
+    [alerts, user, addActivity],
+  );
+
+  // ── Retrain Model ──
+  const handleRetrainModel = useCallback(() => {
+    if (isRetraining) return;
+    setIsRetraining(true);
+    setTimeout(() => {
+      setModelVersion((prev) => {
+        const parts = prev.replace("v", "").split(".").map(Number);
+        parts[2] = (parts[2] ?? 0) + 1;
+        return `v${parts.join(".")}`;
+      });
+      setRetrainingQueue([]);
+      setIsRetraining(false);
+      addActivity(
+        "AI model retrained with queued cases",
+        user?.email ?? "system",
+      );
+      toast.success("Model retrained successfully!", { duration: 3000 });
+    }, 3000);
+  }, [isRetraining, user, addActivity]);
+
+  // ── Deploy Honeypot ──
+  const handleDeployHoneypot = useCallback(() => {
+    const endpoints = ["/api/v1/login", "/api/v1/data", "/api/v1/admin"];
+    const payloads = [
+      "' UNION SELECT * FROM users--",
+      "<img src=x onerror=alert(1)>",
+      "../../../etc/shadow",
+      "admin'; DROP TABLE users;--",
+      "1 OR 1=1--",
+    ];
+    const ips = [
+      `${Math.floor(Math.random() * 100 + 100)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+    ];
+    const newLog: HoneypotLog = {
+      id: `h-${Date.now()}`,
+      ip: ips[0],
+      payload: payloads[Math.floor(Math.random() * payloads.length)],
+      endpoint: endpoints[Math.floor(Math.random() * endpoints.length)],
+      timestamp: new Date(),
+      autoFlagged: Math.random() > 0.3,
+    };
+    setHoneypotLogs((prev) => [newLog, ...prev]);
+    incrementIpCount(newLog.ip);
+    addActivity(
+      `Honeypot triggered by ${newLog.ip} on ${newLog.endpoint}`,
+      "HONEYPOT",
+    );
+    toast.success(`Honeypot triggered: ${newLog.ip}`, { duration: 3000 });
+  }, [incrementIpCount, addActivity]);
 
   const handleLogin = useCallback(
     (email: string, password: string): boolean => {
@@ -500,6 +614,11 @@ export default function App() {
             preventionCoverage={preventionCoverage}
             scannerEvents={scannerEvents}
             attackEvents={attackEvents}
+            retrainingQueue={retrainingQueue}
+            onRetrainModel={handleRetrainModel}
+            modelVersion={modelVersion}
+            ipAttackCounts={ipAttackCounts}
+            isRetraining={isRetraining}
           />
         );
       case "users":
@@ -521,6 +640,10 @@ export default function App() {
             blockedIps={blockedIps}
             onBlockIp={handleBlockIp}
             currentUserEmail={user.email}
+            retrainingQueue={retrainingQueue}
+            onMarkFalseLabel={handleMarkFalseLabel}
+            ipAttackCounts={ipAttackCounts}
+            modelVersion={modelVersion}
           />
         );
       case "prevent":
@@ -541,7 +664,13 @@ export default function App() {
         );
       case "waf":
         return (
-          <WafPage blockedIps={blockedIps} onUnblockIp={handleUnblockIp} />
+          <WafPage
+            blockedIps={blockedIps}
+            onUnblockIp={handleUnblockIp}
+            honeypotLogs={honeypotLogs}
+            onDeployHoneypot={handleDeployHoneypot}
+            ipAttackCounts={ipAttackCounts}
+          />
         );
       case "activity":
         return <ActivityPage activity={activity} />;
@@ -554,6 +683,7 @@ export default function App() {
             blockedIps={blockedIps}
             onBlockIp={handleBlockIp}
             currentUser={user}
+            ipAttackCounts={ipAttackCounts}
           />
         );
       default:

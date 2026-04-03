@@ -3,6 +3,7 @@ import type {
   Alert,
   AttackScenario,
   ExtendedUser,
+  HoneypotLog,
   PreventionTask,
   ThreatPoint,
 } from "./types";
@@ -20,6 +21,7 @@ export const ATTACK_SCENARIOS: AttackScenario[] = [
       "Validate sanitization controls",
     ],
     prevention: "Apply parameterized queries and server-side allowlists.",
+    obfuscatedPayload: "' OR 1%3D1 --",
   },
   {
     id: "xss",
@@ -32,6 +34,7 @@ export const ATTACK_SCENARIOS: AttackScenario[] = [
       "Check CSP and encoding responses",
     ],
     prevention: "Encode output and enforce strict CSP.",
+    obfuscatedPayload: "<scr/**/ipt>alert(1)</scr/**/ipt>",
   },
   {
     id: "session",
@@ -945,3 +948,47 @@ export function generateAutoAttack(): {
     attackerIp: ip,
   };
 }
+
+// ── Honeypot System Initial Data ──
+export const INITIAL_HONEYPOT_LOGS: HoneypotLog[] = [
+  {
+    id: "h1",
+    ip: "103.45.67.89",
+    payload: "' OR '1'='1",
+    endpoint: "/api/v1/login",
+    timestamp: new Date(Date.now() - 300000),
+    autoFlagged: true,
+  },
+  {
+    id: "h2",
+    ip: "45.227.253.11",
+    payload: '<script>document.location="http://evil.com"</script>',
+    endpoint: "/api/v1/admin",
+    timestamp: new Date(Date.now() - 600000),
+    autoFlagged: true,
+  },
+  {
+    id: "h3",
+    ip: "192.168.1.105",
+    payload: "../../../etc/passwd",
+    endpoint: "/api/v1/data",
+    timestamp: new Date(Date.now() - 900000),
+    autoFlagged: false,
+  },
+  {
+    id: "h4",
+    ip: "77.88.99.10",
+    payload: "admin' --",
+    endpoint: "/api/v1/login",
+    timestamp: new Date(Date.now() - 1200000),
+    autoFlagged: true,
+  },
+  {
+    id: "h5",
+    ip: "210.16.75.33",
+    payload: "UN/**/ION SEL/**/ECT * FROM users",
+    endpoint: "/api/v1/data",
+    timestamp: new Date(Date.now() - 1500000),
+    autoFlagged: true,
+  },
+];

@@ -17,11 +17,14 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import WafSimulationModal from "../components/WafSimulationModal";
-import type { BlockedIp } from "../types";
+import type { BlockedIp, HoneypotLog, IpStats } from "../types";
 
 interface WafPageProps {
   blockedIps: BlockedIp[];
   onUnblockIp: (id: string) => void;
+  honeypotLogs?: HoneypotLog[];
+  onDeployHoneypot?: () => void;
+  ipAttackCounts?: Record<string, IpStats>;
 }
 
 interface WafRule {
@@ -236,7 +239,225 @@ const ACTION_COLORS: Record<string, string> = {
   CHALLENGE: "text-blue-400 bg-blue-400/10 border-blue-400/30",
 };
 
-export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
+function getAdaptiveBlockStatus(
+  ip: string,
+  ipAttackCounts: Record<string, IpStats>,
+  blockedIps: BlockedIp[],
+): { label: string; cls: string } {
+  const manuallyBlocked = blockedIps.some((b) => b.ip === ip);
+  if (manuallyBlocked) {
+    const stats = ipAttackCounts[ip];
+    if (stats) {
+      if (stats.count >= 10)
+        return {
+          label: "PERM BLOCK",
+          cls: "text-red-400 border-red-400/40 bg-red-400/10",
+        };
+      if (stats.count >= 3)
+        return {
+          label: "TEMP BLOCK",
+          cls: "text-orange-400 border-orange-400/40 bg-orange-400/10",
+        };
+    }
+    return {
+      label: "MANUAL",
+      cls: "text-cyan-400 border-cyan-400/40 bg-cyan-400/10",
+    };
+  }
+  const stats = ipAttackCounts[ip];
+  if (!stats)
+    return { label: "WATCHING", cls: "text-muted-foreground border-border" };
+  if (stats.count >= 10)
+    return {
+      label: "PERM BLOCK",
+      cls: "text-red-400 border-red-400/40 bg-red-400/10",
+    };
+  if (stats.count >= 3)
+    return {
+      label: "TEMP BLOCK",
+      cls: "text-orange-400 border-orange-400/40 bg-orange-400/10",
+    };
+  return {
+    label: `WATCHING (${stats.count})`,
+    cls: "text-yellow-400 border-yellow-400/40 bg-yellow-400/10",
+  };
+}
+
+function HoneypotPanel({
+  logs,
+  onDeploy,
+}: {
+  logs: HoneypotLog[];
+  onDeploy: () => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [honeypotActive, setHoneypotActive] = useState(true);
+
+  const endpoints = ["/api/v1/login", "/api/v1/data", "/api/v1/admin"];
+
+  return (
+    <div
+      className="bg-card border border-border rounded-lg mt-4 overflow-hidden"
+      data-ocid="waf.honeypot.panel"
+    >
+      <button
+        type="button"
+        className="w-full px-4 py-3 flex items-center gap-2 border-b border-border hover:bg-secondary/10 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="text-yellow-400 text-base">&#x1F36F;</span>
+        <span className="text-sm font-mono font-bold uppercase tracking-widest text-foreground">
+          HONEYPOT SYSTEM
+        </span>
+        <span
+          className={`ml-2 text-[9px] font-mono border rounded px-1.5 py-0.5 ${
+            honeypotActive
+              ? "text-green-400 border-green-400/40 bg-green-400/10"
+              : "text-red-400 border-red-400/40 bg-red-400/10"
+          }`}
+        >
+          {honeypotActive ? "● ACTIVE" : "○ INACTIVE"}
+        </span>
+        <span className="ml-auto text-[9px] font-mono text-red-400 border border-red-400/30 rounded px-1.5 py-0.5">
+          {logs.filter((l) => l.autoFlagged).length} FLAGGED
+        </span>
+        {expanded ? (
+          <ChevronUp size={14} className="text-muted-foreground" />
+        ) : (
+          <ChevronDown size={14} className="text-muted-foreground" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="p-4">
+          {/* Status and endpoints */}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-muted-foreground">
+                STATUS:
+              </span>
+              <button
+                type="button"
+                onClick={() => setHoneypotActive((v) => !v)}
+                data-ocid="waf.honeypot.toggle"
+                className={`relative w-8 h-4 rounded-full transition-colors ${
+                  honeypotActive ? "bg-green-500/40" : "bg-red-500/20"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${
+                    honeypotActive
+                      ? "left-[18px] bg-green-400"
+                      : "left-0.5 bg-red-400"
+                  }`}
+                />
+              </button>
+              <span
+                className={`text-[10px] font-mono font-bold ${honeypotActive ? "text-green-400" : "text-red-400"}`}
+              >
+                {honeypotActive ? "ACTIVE" : "INACTIVE"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-mono text-muted-foreground">
+                ENDPOINTS:
+              </span>
+              {endpoints.map((ep) => (
+                <code
+                  key={ep}
+                  className="text-[9px] font-mono text-yellow-300 bg-yellow-500/5 border border-yellow-500/20 rounded px-1.5 py-0.5"
+                >
+                  {ep}
+                </code>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={onDeploy}
+              data-ocid="waf.honeypot.deploy_button"
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded border border-yellow-400/50 text-yellow-400 font-mono text-[10px] font-bold tracking-widest hover:bg-yellow-400/10 transition-colors"
+            >
+              <span>🍯</span>
+              DEPLOY HONEYPOT
+            </button>
+          </div>
+
+          {/* Honeypot log table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px] font-mono">
+              <thead>
+                <tr className="border-b border-border">
+                  {[
+                    "IP",
+                    "PAYLOAD",
+                    "ENDPOINT",
+                    "TIMESTAMP",
+                    "AUTO-FLAGGED",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left text-muted-foreground uppercase tracking-widest py-2 pr-4"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log, idx) => (
+                  <tr
+                    key={log.id}
+                    data-ocid={`waf.honeypot.item.${idx + 1}`}
+                    className="border-b border-border/40 hover:bg-secondary/10 transition-colors"
+                  >
+                    <td className="py-2 pr-4 text-cyber-cyan">{log.ip}</td>
+                    <td className="py-2 pr-4 max-w-[180px]">
+                      <code className="text-yellow-300 truncate block">
+                        {log.payload.slice(0, 35)}
+                        {log.payload.length > 35 ? "..." : ""}
+                      </code>
+                    </td>
+                    <td className="py-2 pr-4">
+                      <code className="text-muted-foreground">
+                        {log.endpoint}
+                      </code>
+                    </td>
+                    <td className="py-2 pr-4 text-muted-foreground">
+                      {new Date(log.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {log.autoFlagged ? (
+                        <span className="text-red-400 border border-red-400/40 bg-red-400/10 rounded px-1.5 py-0.5 font-bold text-[9px]">
+                          YES ⚠
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground border border-border rounded px-1.5 py-0.5 text-[9px]">
+                          NO
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function WafPage({
+  blockedIps,
+  onUnblockIp,
+  honeypotLogs = [],
+  onDeployHoneypot,
+  ipAttackCounts = {},
+}: WafPageProps) {
   const [rules, setRules] = useState<WafRule[]>(INITIAL_WAF_RULES);
   const [wafEnabled, setWafEnabled] = useState(true);
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
@@ -271,7 +492,8 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
           SECURE WEB APPLICATION FIREWALL
         </h1>
         <p className="text-xs font-mono text-muted-foreground mt-1">
-          Real-time WAF rule management, blocked request log, and IP block list
+          Real-time WAF rule management, blocked request log, IP block list, and
+          Honeypot system
         </p>
       </div>
 
@@ -302,7 +524,6 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
               "rgba(0,229,255,0.04)";
           }}
         >
-          {/* Animated scan line */}
           <span
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -449,7 +670,6 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                     !rule.enabled ? "opacity-50" : ""
                   }`}
                 >
-                  {/* Toggle */}
                   <button
                     type="button"
                     onClick={() => toggleRule(rule.id)}
@@ -465,8 +685,6 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                       }`}
                     />
                   </button>
-
-                  {/* Rule info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono font-bold text-foreground">
@@ -487,8 +705,6 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                       </span>
                     </div>
                   </div>
-
-                  {/* Hits */}
                   <div className="text-right shrink-0">
                     <p className="text-sm font-mono font-bold text-cyber-cyan">
                       {rule.hits.toLocaleString()}
@@ -497,8 +713,6 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                       HITS
                     </p>
                   </div>
-
-                  {/* Expand */}
                   <button
                     type="button"
                     onClick={() =>
@@ -513,8 +727,6 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                     )}
                   </button>
                 </div>
-
-                {/* Expanded pattern */}
                 {expandedRule === rule.id && (
                   <div className="px-4 pb-3 ml-11">
                     <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest mb-1">
@@ -577,11 +789,7 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                   </td>
                   <td className="px-4 py-2">
                     <span
-                      className={`text-[9px] font-mono border rounded px-1 py-0.5 ${
-                        req.method === "POST"
-                          ? "text-orange-400 border-orange-400/30"
-                          : "text-blue-400 border-blue-400/30"
-                      }`}
+                      className={`text-[9px] font-mono border rounded px-1 py-0.5 ${req.method === "POST" ? "text-orange-400 border-orange-400/30" : "text-blue-400 border-blue-400/30"}`}
                     >
                       {req.method}
                     </span>
@@ -613,6 +821,9 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                 BLOCKED IP ADDRESSES ({blockedIps.length})
               </span>
             </div>
+            <div className="text-[9px] font-mono text-muted-foreground">
+              Adaptive: 3 hits=TEMP | 10 hits=PERM
+            </div>
           </div>
           {blockedIps.length === 0 ? (
             <div className="p-8 text-center">
@@ -630,6 +841,8 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                 <tr className="border-b border-border">
                   {[
                     "IP ADDRESS",
+                    "HITS",
+                    "BLOCK TYPE",
                     "REASON",
                     "BLOCKED BY",
                     "BLOCKED AT",
@@ -645,49 +858,75 @@ export default function WafPage({ blockedIps, onUnblockIp }: WafPageProps) {
                 </tr>
               </thead>
               <tbody>
-                {blockedIps.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-b border-border/40 hover:bg-secondary/10 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Ban size={10} className="text-red-400" />
-                        <span className="text-[11px] font-mono font-bold text-red-400">
-                          {entry.ip}
+                {blockedIps.map((entry) => {
+                  const blockStatus = getAdaptiveBlockStatus(
+                    entry.ip,
+                    ipAttackCounts,
+                    blockedIps,
+                  );
+                  const hits = ipAttackCounts[entry.ip]?.count ?? 0;
+                  return (
+                    <tr
+                      key={entry.id}
+                      className="border-b border-border/40 hover:bg-secondary/10 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Ban size={10} className="text-red-400" />
+                          <span className="text-[11px] font-mono font-bold text-red-400">
+                            {entry.ip}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[10px] font-mono font-bold text-cyber-cyan">
+                          {hits}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[10px] font-mono text-muted-foreground max-w-[200px] truncate">
-                      {entry.reason}
-                    </td>
-                    <td className="px-4 py-3 text-[10px] font-mono text-cyber-cyan truncate">
-                      {entry.blockedBy}
-                    </td>
-                    <td className="px-4 py-3 text-[10px] font-mono text-muted-foreground">
-                      {new Date(entry.blockedAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => onUnblockIp(entry.id)}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors"
-                      >
-                        <Trash2 size={10} />
-                        UNBLOCK
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`text-[9px] font-mono border rounded px-1.5 py-0.5 font-bold ${blockStatus.cls}`}
+                        >
+                          {blockStatus.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-muted-foreground max-w-[180px] truncate">
+                        {entry.reason}
+                      </td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-cyber-cyan truncate">
+                        {entry.blockedBy}
+                      </td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-muted-foreground">
+                        {new Date(entry.blockedAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => onUnblockIp(entry.id)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors"
+                        >
+                          <Trash2 size={10} />
+                          UNBLOCK
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       )}
+
+      {/* Honeypot System */}
+      <HoneypotPanel
+        logs={honeypotLogs}
+        onDeploy={onDeployHoneypot ?? (() => {})}
+      />
 
       {/* Security posture summary */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">

@@ -1,6 +1,18 @@
-import { Activity, Bell, Radio, Shield } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  Brain,
+  ChevronDown,
+  ChevronUp,
+  Radio,
+  RefreshCw,
+  Shield,
+  TrendingUp,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -9,7 +21,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AttackEvent, ScannerEvent, ThreatPoint } from "../types";
+import type {
+  AttackEvent,
+  IpStats,
+  RetrainingCase,
+  ScannerEvent,
+  ThreatPoint,
+} from "../types";
 
 interface DashboardPageProps {
   threatLevel: number;
@@ -20,6 +38,11 @@ interface DashboardPageProps {
   preventionCoverage: number;
   scannerEvents?: ScannerEvent[];
   attackEvents?: AttackEvent[];
+  retrainingQueue?: RetrainingCase[];
+  onRetrainModel?: () => void;
+  modelVersion?: string;
+  ipAttackCounts?: Record<string, IpStats>;
+  isRetraining?: boolean;
 }
 
 function StatCard({
@@ -27,11 +50,13 @@ function StatCard({
   value,
   valueColor,
   sublabel,
+  sparkData,
 }: {
   label: string;
   value: string | number;
   valueColor: string;
   sublabel?: string;
+  sparkData?: number[];
 }) {
   return (
     <div className="bg-card border border-border rounded p-4 flex flex-col gap-1">
@@ -43,6 +68,24 @@ function StatCard({
         <p className="text-[10px] text-muted-foreground font-mono">
           {sublabel}
         </p>
+      )}
+      {sparkData && sparkData.length > 1 && (
+        <div className="flex items-end gap-0.5 mt-1" style={{ height: 20 }}>
+          {sparkData.map((v, i) => {
+            const max = Math.max(...sparkData, 1);
+            return (
+              <div
+                key={`spark-${i}-${v}`}
+                className="flex-1 rounded-sm transition-all duration-300"
+                style={{
+                  height: `${Math.round((v / max) * 100)}%`,
+                  background: "oklch(0.72 0.2 182 / 0.5)",
+                  minHeight: 2,
+                }}
+              />
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -364,7 +407,7 @@ function LiveScanner({ externalEvents }: { externalEvents?: ScannerEvent[] }) {
   );
 }
 
-// ─── ML Anomaly Panel ────────────────────────────────────────────────────────
+// ─── ML Anomaly Panel ─────────────────────────────────────────────────────────────────────────────
 
 type AnomalyStatus = "NORMAL" | "ANOMALOUS" | "CRITICAL";
 
@@ -383,6 +426,31 @@ const TFIDF_FEATURES = [
   { keyword: "brute_force_pattern", weight: 0.58 },
 ];
 
+// Top 8 XAI feature keywords for dashboard panel
+const TOP_FEATURES = [
+  { keyword: "sql_union_select", score: 0.94 },
+  { keyword: "xss_script_tag", score: 0.87 },
+  { keyword: "csrf_token_missing", score: 0.76 },
+  { keyword: "cmd_injection", score: 0.71 },
+  { keyword: "path_traversal", score: 0.65 },
+  { keyword: "brute_force_pattern", score: 0.58 },
+  { keyword: "onerror_handler", score: 0.52 },
+  { keyword: "payload_entropy", score: 0.47 },
+];
+
+// Model metrics
+const MODEL_METRICS = [
+  { model: "XGBoost", accuracy: 96.2, precision: 94.8, recall: 97.1, f1: 95.9 },
+  { model: "SVM", accuracy: 93.7, precision: 91.2, recall: 95.4, f1: 93.3 },
+  {
+    model: "Ensemble",
+    accuracy: 97.8,
+    precision: 96.4,
+    recall: 98.2,
+    f1: 97.3,
+  },
+];
+
 function getAnomalyStatus(score: number): AnomalyStatus {
   if (score < 30) return "NORMAL";
   if (score <= 70) return "ANOMALOUS";
@@ -394,7 +462,7 @@ function makeTimeLabel() {
   return `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
 }
 
-function MLAnomalyPanel() {
+function MLAnomalyPanel({ modelVersion }: { modelVersion?: string }) {
   const [dataPoints, setDataPoints] = useState<AnomalyPoint[]>(() => {
     const pts: AnomalyPoint[] = [];
     let score = 45;
@@ -456,6 +524,11 @@ function MLAnomalyPanel() {
         <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
           ML ENGINE
         </span>
+        {modelVersion && (
+          <span className="ml-auto text-[9px] font-mono text-purple-400 border border-purple-500/30 rounded px-1.5 py-0.5">
+            {modelVersion}
+          </span>
+        )}
       </div>
       <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground mb-4">
         MACHINE LEARNING ANALYSIS
@@ -574,7 +647,611 @@ function MLAnomalyPanel() {
   );
 }
 
-// ─── Recent Attack Details Panel ─────────────────────────────────────────────
+// ─── Model Comparison Panel ────────────────────────────────────────────────────────────────────────
+function ModelComparisonPanel() {
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.model_comparison.panel"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Brain size={14} className="text-purple-400" />
+        <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground">
+          MODEL COMPARISON
+        </p>
+        <span className="ml-auto text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-cyan-400/40 text-cyan-400 bg-cyan-400/5">
+          VOTING WINNER: ENSEMBLE
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[10px] font-mono">
+          <thead>
+            <tr className="border-b border-border">
+              {["MODEL", "ACCURACY", "PRECISION", "RECALL", "F1"].map((h) => (
+                <th
+                  key={h}
+                  className="text-left text-muted-foreground uppercase tracking-widest py-2 pr-4"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {MODEL_METRICS.map((m) => (
+              <tr
+                key={m.model}
+                className={`border-b border-border/40 ${m.model === "Ensemble" ? "bg-cyan-400/5" : ""}`}
+              >
+                <td
+                  className={`py-2 pr-4 font-bold ${m.model === "Ensemble" ? "text-cyan-400" : m.model === "XGBoost" ? "text-purple-400" : "text-blue-400"}`}
+                >
+                  {m.model}
+                  {m.model === "Ensemble" && (
+                    <span className="ml-1.5 text-[8px] border border-cyan-400/40 rounded px-1 text-cyan-300">
+                      ★ BEST
+                    </span>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-emerald-400">{m.accuracy}%</td>
+                <td className="py-2 pr-4 text-emerald-300">{m.precision}%</td>
+                <td className="py-2 pr-4 text-emerald-300">{m.recall}%</td>
+                <td className="py-2 pr-4 text-cyan-400 font-bold">{m.f1}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── XAI Top Features Panel ──────────────────────────────────────────────────────────────────────
+function XAITopFeaturesPanel() {
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.xai_features.panel"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-emerald-400 text-[10px] font-mono">■</span>
+        <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground">
+          XAI — TOP ATTACK SIGNAL FEATURES
+        </p>
+      </div>
+      <p className="text-[10px] font-mono text-muted-foreground mb-4">
+        TF-IDF importance scores for top 8 keywords driving ML threat
+        classification
+      </p>
+      <ResponsiveContainer width="100%" height={180}>
+        <BarChart
+          data={TOP_FEATURES}
+          layout="vertical"
+          margin={{ top: 0, right: 20, bottom: 0, left: 20 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="oklch(0.22 0.01 248)"
+            strokeOpacity={0.4}
+            horizontal={false}
+          />
+          <XAxis
+            type="number"
+            domain={[0, 1]}
+            tick={{
+              fill: "oklch(0.45 0 0)",
+              fontSize: 9,
+              fontFamily: "monospace",
+            }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="keyword"
+            tick={{
+              fill: "oklch(0.65 0 0)",
+              fontSize: 9,
+              fontFamily: "monospace",
+            }}
+            axisLine={false}
+            tickLine={false}
+            width={140}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "oklch(0.13 0.012 248)",
+              border: "1px solid oklch(0.22 0.01 248)",
+              borderRadius: 4,
+              fontFamily: "monospace",
+              fontSize: 10,
+            }}
+            formatter={(v: number) => [v.toFixed(3), "TF-IDF Score"]}
+          />
+          <Bar
+            dataKey="score"
+            fill="oklch(0.72 0.2 145)"
+            radius={[0, 3, 3, 0]}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── AI Retraining Panel ───────────────────────────────────────────────────────────────────────────
+function AIRetrainingPanel({
+  queue,
+  onRetrain,
+  modelVersion,
+  isRetraining,
+}: {
+  queue: RetrainingCase[];
+  onRetrain: () => void;
+  modelVersion: string;
+  isRetraining: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const lastRetrainRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isRetraining) {
+      lastRetrainRef.current = new Date().toLocaleTimeString();
+    }
+  }, [isRetraining]);
+
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.retraining.panel"
+    >
+      <button
+        type="button"
+        className="w-full flex items-center gap-2"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <RefreshCw size={14} className="text-orange-400" />
+        <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground flex-1 text-left">
+          AI RETRAINING CENTER
+        </p>
+        {queue.length > 0 && (
+          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-orange-400/20 text-orange-400 border border-orange-400/40">
+            {queue.length} QUEUED
+          </span>
+        )}
+        <span className="text-[9px] font-mono text-purple-400 border border-purple-400/30 rounded px-1.5 py-0.5 ml-2">
+          {modelVersion}
+        </span>
+        {expanded ? (
+          <ChevronUp size={14} className="text-muted-foreground" />
+        ) : (
+          <ChevronDown size={14} className="text-muted-foreground" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-[10px] font-mono text-muted-foreground">
+                Last retrain: {lastRetrainRef.current ?? "Never"}
+              </p>
+              <p className="text-[10px] font-mono text-muted-foreground">
+                Queue: {queue.length} case{queue.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onRetrain}
+              disabled={isRetraining || queue.length === 0}
+              data-ocid="dashboard.retrain.button"
+              className="flex items-center gap-2 px-3 py-1.5 rounded border font-mono text-[11px] font-bold tracking-widest transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-orange-400/50 text-orange-400 hover:bg-orange-400/10"
+            >
+              <RefreshCw
+                size={11}
+                className={isRetraining ? "animate-spin" : ""}
+              />
+              {isRetraining ? "RETRAINING..." : "🔄 RETRAIN MODEL"}
+            </button>
+          </div>
+
+          {isRetraining && (
+            <div className="mb-3">
+              <div className="h-1.5 rounded bg-secondary overflow-hidden">
+                <div
+                  className="h-full rounded bg-orange-400 transition-all duration-300 animate-pulse"
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <p className="text-[9px] font-mono text-orange-400 mt-1 animate-pulse">
+                TRAINING IN PROGRESS...
+              </p>
+            </div>
+          )}
+
+          {queue.length === 0 ? (
+            <p
+              className="text-[10px] font-mono text-muted-foreground text-center py-4"
+              data-ocid="dashboard.retraining.empty_state"
+            >
+              No cases queued — mark alerts as FP/FN from the Detect page
+            </p>
+          ) : (
+            <div className="space-y-2" data-ocid="dashboard.retraining.list">
+              {queue.map((c, idx) => (
+                <div
+                  key={c.id}
+                  data-ocid={`dashboard.retraining.item.${idx + 1}`}
+                  className="flex items-center gap-3 px-3 py-2 rounded border border-border bg-secondary/20"
+                >
+                  <span
+                    className={`text-[9px] font-mono font-bold border rounded px-1.5 py-0.5 ${
+                      c.label === "FP"
+                        ? "text-yellow-400 border-yellow-400/40 bg-yellow-400/10"
+                        : "text-red-400 border-red-400/40 bg-red-400/10"
+                    }`}
+                  >
+                    {c.label}
+                  </span>
+                  <span className="text-[10px] font-mono text-foreground/70 flex-1 truncate">
+                    {c.attackType}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted-foreground shrink-0">
+                    {new Date(c.timestamp).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── System Risk Score Gauge ──────────────────────────────────────────────────────────────────────
+
+function getRiskLabel(score: number): {
+  label: string;
+  color: string;
+  glow: string;
+} {
+  if (score <= 25)
+    return {
+      label: "LOW",
+      color: "text-green-400",
+      glow: "oklch(0.62 0.18 145)",
+    };
+  if (score <= 50)
+    return {
+      label: "MEDIUM",
+      color: "text-yellow-400",
+      glow: "oklch(0.78 0.18 80)",
+    };
+  if (score <= 75)
+    return {
+      label: "HIGH",
+      color: "text-orange-400",
+      glow: "oklch(0.65 0.18 50)",
+    };
+  return {
+    label: "CRITICAL",
+    color: "text-red-400",
+    glow: "oklch(0.55 0.22 25)",
+  };
+}
+
+function SystemRiskGauge({ score }: { score: number }) {
+  const risk = getRiskLabel(score);
+  const barColor =
+    score > 75
+      ? "linear-gradient(90deg, oklch(0.55 0.22 25), oklch(0.65 0.2 30))"
+      : score > 50
+        ? "linear-gradient(90deg, oklch(0.65 0.18 50), oklch(0.72 0.16 60))"
+        : score > 25
+          ? "linear-gradient(90deg, oklch(0.72 0.18 80), oklch(0.78 0.16 90))"
+          : "linear-gradient(90deg, oklch(0.55 0.18 145), oklch(0.65 0.16 155))";
+
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.risk_gauge.panel"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Shield size={14} className="text-red-400" />
+        <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground">
+          SYSTEM RISK SCORE
+        </p>
+      </div>
+      <div className="flex items-center gap-6">
+        <div className="flex flex-col items-center">
+          <p
+            className={`text-5xl font-mono font-bold ${risk.color}`}
+            style={{ textShadow: `0 0 20px ${risk.glow}` }}
+          >
+            {score}
+          </p>
+          <p
+            className={`text-xs font-mono font-bold tracking-widest mt-1 ${risk.color}`}
+          >
+            {risk.label}
+          </p>
+        </div>
+        <div className="flex-1">
+          <div className="w-full h-3 rounded bg-secondary overflow-hidden mb-2">
+            <div
+              className="h-full rounded transition-all duration-700"
+              style={{
+                width: `${score}%`,
+                background: barColor,
+                boxShadow: `0 0 10px ${risk.glow} / 0.7`,
+              }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] font-mono text-muted-foreground">
+            <span className="text-green-400">LOW</span>
+            <span className="text-yellow-400">MEDIUM</span>
+            <span className="text-orange-400">HIGH</span>
+            <span className="text-red-400">CRITICAL</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Behavioral Analysis Panel ──────────────────────────────────────────────────────────────────────
+
+interface BehaviorEntry {
+  ip: string;
+  requests: number;
+  reqPerMin: number;
+  sessionDuration: string;
+  status: "NORMAL" | "SUSPICIOUS" | "ANOMALOUS";
+}
+
+const INITIAL_BEHAVIOR: BehaviorEntry[] = [
+  {
+    ip: "192.168.1.101",
+    requests: 23,
+    reqPerMin: 1.2,
+    sessionDuration: "12m 45s",
+    status: "NORMAL",
+  },
+  {
+    ip: "192.168.1.102",
+    requests: 54,
+    reqPerMin: 3.4,
+    sessionDuration: "8m 10s",
+    status: "NORMAL",
+  },
+  {
+    ip: "192.168.1.103",
+    requests: 187,
+    reqPerMin: 7.8,
+    sessionDuration: "24m 02s",
+    status: "SUSPICIOUS",
+  },
+  {
+    ip: "10.0.0.55",
+    requests: 312,
+    reqPerMin: 11.3,
+    sessionDuration: "4m 30s",
+    status: "SUSPICIOUS",
+  },
+  {
+    ip: "45.227.253.11",
+    requests: 88,
+    reqPerMin: 2.1,
+    sessionDuration: "3m 15s",
+    status: "NORMAL",
+  },
+  {
+    ip: "103.45.67.89",
+    requests: 1044,
+    reqPerMin: 22.4,
+    sessionDuration: "47m 10s",
+    status: "ANOMALOUS",
+  },
+];
+
+function BehavioralAnalysisPanel() {
+  const [behavior, setBehavior] = useState<BehaviorEntry[]>(INITIAL_BEHAVIOR);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBehavior((prev) =>
+        prev.map((entry) => {
+          const delta = Math.floor(Math.random() * 5) - 1;
+          const newRequests = Math.max(1, entry.requests + delta);
+          const newReqPerMin = Math.max(
+            0.1,
+            Math.round((entry.reqPerMin + (Math.random() * 0.4 - 0.2)) * 10) /
+              10,
+          );
+          let newStatus: BehaviorEntry["status"] = "NORMAL";
+          if (newReqPerMin > 15) newStatus = "ANOMALOUS";
+          else if (newReqPerMin > 5) newStatus = "SUSPICIOUS";
+          return {
+            ...entry,
+            requests: newRequests,
+            reqPerMin: newReqPerMin,
+            status: newStatus,
+          };
+        }),
+      );
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const statusStyle: Record<BehaviorEntry["status"], string> = {
+    NORMAL: "text-green-400 border-green-400/40 bg-green-400/10",
+    SUSPICIOUS: "text-yellow-400 border-yellow-400/40 bg-yellow-400/10",
+    ANOMALOUS: "text-red-400 border-red-400/40 bg-red-400/10",
+  };
+
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.behavioral.panel"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Activity size={14} className="text-cyan-400" />
+        <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground">
+          BEHAVIORAL ANALYSIS
+        </p>
+        <span className="ml-auto text-[9px] font-mono text-cyan-400/70">
+          Updates every 8s
+        </span>
+      </div>
+      <p className="text-[10px] font-mono text-muted-foreground mb-3">
+        Anomaly threshold: &gt;5 req/min = SUSPICIOUS | &gt;15 req/min =
+        ANOMALOUS
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[10px] font-mono">
+          <thead>
+            <tr className="border-b border-border">
+              {["IP ADDRESS", "REQUESTS", "REQ/MIN", "SESSION", "STATUS"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="text-left text-muted-foreground uppercase tracking-widest py-2 pr-4"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {behavior.map((entry, idx) => (
+              <tr
+                key={entry.ip}
+                data-ocid={`dashboard.behavioral.item.${idx + 1}`}
+                className="border-b border-border/40 hover:bg-secondary/10 transition-colors"
+              >
+                <td className="py-2 pr-4 text-cyber-cyan">{entry.ip}</td>
+                <td className="py-2 pr-4 text-foreground">
+                  {entry.requests.toLocaleString()}
+                </td>
+                <td
+                  className={`py-2 pr-4 font-bold ${
+                    entry.reqPerMin > 15
+                      ? "text-red-400"
+                      : entry.reqPerMin > 5
+                        ? "text-yellow-400"
+                        : "text-emerald-400"
+                  }`}
+                >
+                  {entry.reqPerMin.toFixed(1)}
+                </td>
+                <td className="py-2 pr-4 text-muted-foreground">
+                  {entry.sessionDuration}
+                </td>
+                <td className="py-2 pr-4">
+                  <span
+                    className={`text-[9px] border rounded px-1.5 py-0.5 font-bold ${statusStyle[entry.status]}`}
+                  >
+                    {entry.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Next Predicted Threat Panel ───────────────────────────────────────────────────────────────────
+const THREAT_PROBS = [
+  { type: "SQL Injection", prob: 35, color: "#ef4444" },
+  { type: "XSS", prob: 22, color: "#f97316" },
+  { type: "Brute Force", prob: 18, color: "#eab308" },
+  { type: "CSRF", prob: 12, color: "#06b6d4" },
+  { type: "Command Injection", prob: 8, color: "#a855f7" },
+  { type: "Other", prob: 5, color: "#6b7280" },
+];
+
+function NextPredictedThreatPanel() {
+  const [countdown, setCountdown] = useState(90);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown((c) => (c <= 1 ? 90 : c - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const top = THREAT_PROBS[0];
+
+  return (
+    <div
+      className="bg-card border border-border rounded p-4 mt-4"
+      data-ocid="dashboard.next_threat.panel"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp size={14} className="text-purple-400" />
+        <p className="text-sm font-mono font-bold uppercase tracking-wide text-foreground">
+          NEXT PREDICTED THREAT
+        </p>
+        <span className="ml-auto text-[9px] font-mono text-muted-foreground">
+          predicted in ~{countdown}s
+        </span>
+      </div>
+      <div className="flex items-center gap-3 mb-4 p-3 rounded border border-red-500/30 bg-red-500/5">
+        <div>
+          <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
+            Most Likely
+          </p>
+          <p className="text-sm font-mono font-bold text-red-400">{top.type}</p>
+        </div>
+        <div className="ml-auto text-right">
+          <p className="text-2xl font-mono font-bold text-red-400">
+            {top.prob}%
+          </p>
+          <p className="text-[9px] font-mono text-muted-foreground">
+            probability
+          </p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {THREAT_PROBS.map((t) => (
+          <div key={t.type}>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] font-mono text-foreground/80">
+                {t.type}
+              </span>
+              <span
+                className="text-[10px] font-mono"
+                style={{ color: t.color }}
+              >
+                {t.prob}%
+              </span>
+            </div>
+            <div className="h-1.5 rounded bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded transition-all duration-500"
+                style={{
+                  width: `${t.prob * 2.8}%`,
+                  background: t.color,
+                  boxShadow: `0 0 6px ${t.color}88`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Recent Attack Details Panel ─────────────────────────────────────────────────────────────────────
 
 function getSeverityBadgeStyle(severity: string): string {
   switch (severity.toLowerCase()) {
@@ -755,9 +1432,89 @@ export default function DashboardPage({
   preventionCoverage,
   scannerEvents,
   attackEvents,
+  retrainingQueue = [],
+  onRetrainModel,
+  modelVersion = "v1.0.0",
+  ipAttackCounts: _ipAttackCounts = {},
+  isRetraining = false,
 }: DashboardPageProps) {
+  // Threat Status Bar
+  const threatStatus =
+    openAlerts === 0 ? "SAFE" : openAlerts <= 2 ? "WARNING" : "CRITICAL";
+  const threatStatusStyle =
+    threatStatus === "SAFE"
+      ? "bg-green-500/10 border-green-500/40 text-green-400"
+      : threatStatus === "WARNING"
+        ? "bg-yellow-500/10 border-yellow-500/40 text-yellow-400"
+        : "bg-red-500/10 border-red-500/40 text-red-400";
+  const threatStatusDot =
+    threatStatus === "SAFE"
+      ? "bg-green-400"
+      : threatStatus === "WARNING"
+        ? "bg-yellow-400"
+        : "bg-red-400";
+
+  // System risk score = max from threat level + open alerts bonus
+  const systemRiskScore = Math.min(100, threatLevel + openAlerts * 5);
+
+  // Sparkline data for stat cards
+  const sparklines = {
+    threat: [threatLevel - 30, threatLevel - 15, threatLevel - 5, threatLevel],
+    alerts: [
+      Math.max(0, openAlerts - 2),
+      Math.max(0, openAlerts - 1),
+      openAlerts,
+      openAlerts,
+    ],
+    blocked: [
+      blockedAttempts,
+      blockedAttempts,
+      blockedAttempts + 1,
+      blockedAttempts,
+    ],
+    attacks: [
+      simulatedAttacks - 3,
+      simulatedAttacks - 1,
+      simulatedAttacks,
+      simulatedAttacks,
+    ],
+  };
+
   return (
     <div className="p-6">
+      {/* Threat Status Bar */}
+      <div
+        data-ocid="dashboard.threat_status.panel"
+        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded border mb-6 ${threatStatusStyle}`}
+        style={{
+          boxShadow:
+            threatStatus === "CRITICAL"
+              ? "0 0 20px oklch(0.55 0.22 25 / 0.2)"
+              : threatStatus === "WARNING"
+                ? "0 0 20px oklch(0.78 0.18 80 / 0.2)"
+                : "0 0 20px oklch(0.62 0.18 145 / 0.2)",
+        }}
+      >
+        <span className="relative flex h-2 w-2">
+          <span
+            className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${threatStatusDot}`}
+          />
+          <span
+            className={`relative inline-flex rounded-full h-2 w-2 ${threatStatusDot}`}
+          />
+        </span>
+        <span className="text-xs font-mono font-bold tracking-widest">
+          SYSTEM STATUS: {threatStatus}
+        </span>
+        <span className="text-[10px] font-mono opacity-70 ml-2">
+          {threatStatus === "SAFE"
+            ? "All systems nominal — no active threats detected"
+            : threatStatus === "WARNING"
+              ? `${openAlerts} open alert${openAlerts !== 1 ? "s" : ""} require attention`
+              : `CRITICAL: ${openAlerts} open alerts — immediate action required`}
+        </span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
@@ -801,24 +1558,28 @@ export default function DashboardPage({
           value={`${threatLevel}%`}
           valueColor="text-cyber-red"
           sublabel="Current risk score"
+          sparkData={sparklines.threat}
         />
         <StatCard
           label="ACTIVE ALERTS"
           value={openAlerts}
           valueColor="text-cyber-yellow"
           sublabel="Awaiting triage"
+          sparkData={sparklines.alerts}
         />
         <StatCard
           label="BLOCKED ATTEMPTS"
           value={blockedAttempts}
           valueColor="text-foreground"
           sublabel="Resolved detections"
+          sparkData={sparklines.blocked}
         />
         <StatCard
           label="SIMULATED ATTACKS"
           value={simulatedAttacks}
           valueColor="text-foreground"
           sublabel="Total replays run"
+          sparkData={sparklines.attacks}
         />
       </div>
 
@@ -910,11 +1671,34 @@ export default function DashboardPage({
         </div>
       </div>
 
+      {/* System Risk Score Gauge */}
+      <SystemRiskGauge score={systemRiskScore} />
+
       {/* Live Scanner */}
       <LiveScanner externalEvents={scannerEvents} />
 
       {/* ML Anomaly Panel */}
-      <MLAnomalyPanel />
+      <MLAnomalyPanel modelVersion={modelVersion} />
+
+      {/* Model Comparison Panel */}
+      <ModelComparisonPanel />
+
+      {/* XAI Top Features Panel */}
+      <XAITopFeaturesPanel />
+
+      {/* Next Predicted Threat Panel */}
+      <NextPredictedThreatPanel />
+
+      {/* Behavioral Analysis */}
+      <BehavioralAnalysisPanel />
+
+      {/* AI Retraining Center */}
+      <AIRetrainingPanel
+        queue={retrainingQueue}
+        onRetrain={onRetrainModel ?? (() => {})}
+        modelVersion={modelVersion}
+        isRetraining={isRetraining}
+      />
 
       {/* Recent Attack Details Panel */}
       <RecentAttackDetailsPanel attackEvents={attackEvents} />
