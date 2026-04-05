@@ -105,6 +105,9 @@ export interface AttackEvent {
   attackType: string;
   source: "auto" | "manual" | "replay";
   websiteName?: string;
+  lat?: number;
+  lon?: number;
+  country?: string;
 }
 
 export interface BlockedIp {

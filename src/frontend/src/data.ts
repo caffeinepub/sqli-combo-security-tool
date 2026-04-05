@@ -919,12 +919,106 @@ export const INDIAN_CITIES = [
   "Coimbatore",
 ];
 
+const CITY_COORDS_DATA: Record<string, { lat: number; lon: number }> = {
+  Mumbai: { lat: 19.076, lon: 72.877 },
+  Delhi: { lat: 28.613, lon: 77.209 },
+  Bengaluru: { lat: 12.972, lon: 77.594 },
+  Chennai: { lat: 13.083, lon: 80.27 },
+  Hyderabad: { lat: 17.385, lon: 78.486 },
+  Kolkata: { lat: 22.572, lon: 88.363 },
+  Pune: { lat: 18.52, lon: 73.856 },
+  Ahmedabad: { lat: 23.022, lon: 72.571 },
+  Jaipur: { lat: 26.912, lon: 75.787 },
+  Surat: { lat: 21.17, lon: 72.831 },
+  Lucknow: { lat: 26.846, lon: 80.946 },
+  Kanpur: { lat: 26.449, lon: 80.331 },
+  Nagpur: { lat: 21.145, lon: 79.088 },
+  Indore: { lat: 22.719, lon: 75.857 },
+  Bhopal: { lat: 23.259, lon: 77.412 },
+  Patna: { lat: 25.594, lon: 85.137 },
+  Visakhapatnam: { lat: 17.686, lon: 83.218 },
+  Vadodara: { lat: 22.307, lon: 73.181 },
+  Coimbatore: { lat: 11.016, lon: 76.955 },
+  Ludhiana: { lat: 30.9, lon: 75.857 },
+  Agra: { lat: 27.176, lon: 78.008 },
+  Nashik: { lat: 20.011, lon: 73.79 },
+};
+
+const GLOBAL_ATTACK_LOCATIONS: {
+  city: string;
+  country: string;
+  lat: number;
+  lon: number;
+}[] = [
+  { city: "New York", country: "USA", lat: 40.7128, lon: -74.006 },
+  { city: "Los Angeles", country: "USA", lat: 34.0522, lon: -118.2437 },
+  { city: "Chicago", country: "USA", lat: 41.8781, lon: -87.6298 },
+  { city: "Houston", country: "USA", lat: 29.7604, lon: -95.3698 },
+  { city: "Washington DC", country: "USA", lat: 38.9072, lon: -77.0369 },
+  { city: "Moscow", country: "Russia", lat: 55.7558, lon: 37.6176 },
+  { city: "St. Petersburg", country: "Russia", lat: 59.9343, lon: 30.3351 },
+  { city: "Novosibirsk", country: "Russia", lat: 54.9884, lon: 82.9357 },
+  { city: "Beijing", country: "China", lat: 39.9042, lon: 116.4074 },
+  { city: "Shanghai", country: "China", lat: 31.2304, lon: 121.4737 },
+  { city: "Shenzhen", country: "China", lat: 22.5431, lon: 114.0579 },
+  { city: "Hong Kong", country: "China", lat: 22.3193, lon: 114.1694 },
+  { city: "Pyongyang", country: "N.Korea", lat: 39.0392, lon: 125.7625 },
+  { city: "Tehran", country: "Iran", lat: 35.6892, lon: 51.389 },
+  { city: "Isfahan", country: "Iran", lat: 32.6546, lon: 51.668 },
+  { city: "London", country: "UK", lat: 51.5074, lon: -0.1278 },
+  { city: "Manchester", country: "UK", lat: 53.4808, lon: -2.2426 },
+  { city: "Berlin", country: "Germany", lat: 52.52, lon: 13.405 },
+  { city: "Frankfurt", country: "Germany", lat: 50.1109, lon: 8.6821 },
+  { city: "Amsterdam", country: "Netherlands", lat: 52.3676, lon: 4.9041 },
+  { city: "Kyiv", country: "Ukraine", lat: 50.4501, lon: 30.5234 },
+  { city: "Kharkiv", country: "Ukraine", lat: 49.9935, lon: 36.2304 },
+  { city: "Sao Paulo", country: "Brazil", lat: -23.5505, lon: -46.6333 },
+  { city: "Rio de Janeiro", country: "Brazil", lat: -22.9068, lon: -43.1729 },
+  { city: "Brasilia", country: "Brazil", lat: -15.8267, lon: -47.9218 },
+  { city: "Lagos", country: "Nigeria", lat: 6.5244, lon: 3.3792 },
+  { city: "Abuja", country: "Nigeria", lat: 9.0579, lon: 7.4951 },
+  { city: "Bucharest", country: "Romania", lat: 44.4268, lon: 26.1025 },
+  { city: "Istanbul", country: "Turkey", lat: 41.0082, lon: 28.9784 },
+  { city: "Ankara", country: "Turkey", lat: 39.9334, lon: 32.8597 },
+  { city: "Tokyo", country: "Japan", lat: 35.6762, lon: 139.6503 },
+  { city: "Osaka", country: "Japan", lat: 34.6937, lon: 135.5023 },
+  { city: "Seoul", country: "S.Korea", lat: 37.5665, lon: 126.978 },
+  { city: "Hanoi", country: "Vietnam", lat: 21.0245, lon: 105.8412 },
+  { city: "Jakarta", country: "Indonesia", lat: -6.2088, lon: 106.8456 },
+  { city: "Sydney", country: "Australia", lat: -33.8688, lon: 151.2093 },
+  { city: "Melbourne", country: "Australia", lat: -37.8136, lon: 144.9631 },
+  { city: "Toronto", country: "Canada", lat: 43.6532, lon: -79.3832 },
+  { city: "Vancouver", country: "Canada", lat: 49.2827, lon: -123.1207 },
+  { city: "Mumbai", country: "India", lat: 19.076, lon: 72.877 },
+  { city: "Delhi", country: "India", lat: 28.613, lon: 77.209 },
+  { city: "Bengaluru", country: "India", lat: 12.972, lon: 77.594 },
+  { city: "Chennai", country: "India", lat: 13.083, lon: 80.27 },
+  { city: "Hyderabad", country: "India", lat: 17.385, lon: 78.486 },
+  { city: "Kolkata", country: "India", lat: 22.572, lon: 88.363 },
+  { city: "Karachi", country: "Pakistan", lat: 24.8607, lon: 67.0011 },
+  { city: "Mexico City", country: "Mexico", lat: 19.4326, lon: -99.1332 },
+  { city: "Buenos Aires", country: "Argentina", lat: -34.6037, lon: -58.3816 },
+  { city: "Johannesburg", country: "S.Africa", lat: -26.2041, lon: 28.0473 },
+  { city: "Cairo", country: "Egypt", lat: 30.0444, lon: 31.2357 },
+  { city: "Paris", country: "France", lat: 48.8566, lon: 2.3522 },
+  { city: "Madrid", country: "Spain", lat: 40.4168, lon: -3.7038 },
+  { city: "Rome", country: "Italy", lat: 41.9028, lon: 12.4964 },
+  { city: "Stockholm", country: "Sweden", lat: 59.3293, lon: 18.0686 },
+  { city: "Tel Aviv", country: "Israel", lat: 32.0853, lon: 34.7818 },
+  { city: "Riyadh", country: "Saudi Arabia", lat: 24.7136, lon: 46.6753 },
+];
+
 export const AUTO_ATTACK_TYPES = [
   "SQL Injection",
   "Cross-Site Scripting (XSS)",
   "Brute Force Attack",
   "Session Hijacking",
   "Privilege Escalation",
+  "DDoS Attack",
+  "Command Injection",
+  "DNS Spoofing",
+  "Credential Stuffing",
+  "CSRF Attack",
 ];
 
 export function generateAutoAttack(): {
@@ -933,19 +1027,46 @@ export function generateAutoAttack(): {
   signal: string;
   city: string;
   attackerIp: string;
+  lat: number;
+  lon: number;
+  country: string;
 } {
-  const city = INDIAN_CITIES[Math.floor(Math.random() * INDIAN_CITIES.length)];
+  const useGlobal = Math.random() < 0.7;
+  let city: string;
+  let lat: number;
+  let lon: number;
+  let country: string;
+  if (useGlobal) {
+    const loc =
+      GLOBAL_ATTACK_LOCATIONS[
+        Math.floor(Math.random() * GLOBAL_ATTACK_LOCATIONS.length)
+      ];
+    city = loc.city;
+    lat = loc.lat;
+    lon = loc.lon;
+    country = loc.country;
+  } else {
+    const indianCity =
+      INDIAN_CITIES[Math.floor(Math.random() * INDIAN_CITIES.length)];
+    city = indianCity;
+    lat = CITY_COORDS_DATA[indianCity]?.lat ?? 20.5;
+    lon = CITY_COORDS_DATA[indianCity]?.lon ?? 78.9;
+    country = "India";
+  }
   const attackType =
     AUTO_ATTACK_TYPES[Math.floor(Math.random() * AUTO_ATTACK_TYPES.length)];
   const ip = `${10 + Math.floor(Math.random() * 245)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
-  const severities = ["critical", "high", "medium"];
+  const severities = ["critical", "high", "medium", "low"] as const;
   const severity = severities[Math.floor(Math.random() * severities.length)];
   return {
     name: attackType,
     severity,
-    signal: `${attackType} attempt detected from ${city}, India`,
+    signal: `${attackType} attempt detected from ${city}, ${country}`,
     city,
     attackerIp: ip,
+    lat,
+    lon,
+    country,
   };
 }
 

@@ -1,117 +1,46 @@
-# SQLi Combo Security Tool — AI Platform Upgrade
+# SQLi Combo Security Tool — Zoom-to-Location Feature
 
 ## Current State
-
-The app is a fully-featured cyberpunk cybersecurity simulation dashboard with:
-- 3 core modules: Attack, Detect, Prevent
-- ML simulation: TF-IDF + XGBoost per-alert scoring on Detect page, Dashboard anomaly panel, Attack tab next-prediction
-- IP blocking from popup/Detect modal/Live Map, managed in WAF tab
-- 3D rotating globe (Three.js) with India boundary and city labels
-- WAF tab with firewall rules, blocked requests, WAF attack simulation animation
-- Reports tab (CSV + PDF download, date range filter)
-- Auto-attack alerts every 90s, Manual mode control
-- 8 demo accounts with role-based access
-- webuser credential stuffing dashboard
-- All pages: dashboard, attack, detect, prevent, reports, users, waf, timeline, map
+LiveAttackMapPage.tsx has a fully functional 3D globe (Three.js/R3F) with:
+- OrbitControls for free rotate/zoom
+- AttackNode components that accept an onClick handler which sets `selectedEvent` state
+- A `selectedEvent` bottom overlay panel showing IP, location, type, time, severity, block button
+- `isAutoRotating` state that disables auto-spin on pointerdown
+- Camera starts at position [0, 0, 2.8]
+- GlobeScene receives `onSelectEvent` callback
 
 ## Requested Changes (Diff)
 
 ### Add
-
-1. **Explainable AI (XAI) Panel** — new section in Detect alert modal
-   - Show RAW INPUT → NORMALIZED INPUT → TOKENIZED pipeline stages
-   - Color-highlight suspicious SQL keywords (UNION, SELECT, OR, DROP, INSERT, DELETE, EXEC, SCRIPT, etc.) in the query string
-   - Token-level contribution bar showing each keyword's TF-IDF weight
-   - XAI panel also on Dashboard as a dedicated "Feature Importance" section
-
-2. **Ensemble ML Model (XGBoost + SVM)** — new panel on Detect page + Dashboard
-   - Side-by-side: XGBoost score vs SVM score vs Ensemble final score
-   - Simulated model comparison metrics table: Accuracy / Precision / Recall / F1 for each model
-   - Voting badge showing which model "won" and why
-   - Replace existing single XGBoost score display with ensemble output
-
-3. **Auto-Retraining System** — new "AI RETRAINING" tab/panel (Dashboard or dedicated section)
-   - Mark any alert as False Positive or False Negative (buttons in Detect modal)
-   - Retraining queue: shows queued cases with payload snippet, label, timestamp
-   - "RETRAIN MODEL" button triggers simulated retraining animation (progress bar, updating metrics)
-   - Model version counter (v1.0.0 → v1.0.1 after retrain)
-
-4. **Smart IP Blocking (Adaptive)** — replace permanent block logic in WAF + App.tsx
-   - Track attack count per IP
-   - 3 attacks → TEMP BLOCK (10-minute timer countdown shown in WAF)
-   - 10 attacks → PERMANENT BLOCK
-   - Block status badge: TEMP / PERM / WATCHING in WAF blocked IPs list
-   - IP attack counter shown in popup and Detect modal
-
-5. **Obfuscation Detection** — new preprocessing pipeline display
-   - Normalize: URL decode (%27→', %20→space), strip inline comments (UN/**/ION → UNION), normalize case
-   - Show preprocessing steps visually in XAI panel: before/after
-   - Add obfuscated attack variants to attack scenarios (e.g., "' OR 1%3D1 --", "UN/**/ION SEL/**/ECT")
-
-6. **Honeypot System** — new tab or panel (admin only)
-   - Fake /login and /api/data endpoint simulation
-   - When attacker triggers honeypot: logs IP, payload, timestamp, auto-marks as SUSPICIOUS
-   - Honeypot activity feed in WAF tab or dedicated Honeypot panel
-   - "Deploy Honeypot" toggle, configurable endpoint paths
-
-7. **Live Attack Map Enhancement**
-   - Add heatmap overlay toggle (brighter glow on cities with more attacks)
-   - "Top Attacking Cities" sidebar panel on map page
-   - Attack source → target connection lines (arcs from attacker city to "HQ" center)
-   - Attack count bubble per city
-
-8. **Dynamic Risk Scoring System**
-   - Calculate composite risk score per IP and per session: frequency × severity × confidence
-   - Show risk level badge: LOW / MEDIUM / HIGH / CRITICAL on each alert
-   - Dashboard: overall Risk Score meter (0–100) with animated gauge
-   - Per-IP risk score in WAF blocked list and Detect modal
-
-9. **Next Attack Prediction (Enhanced)**
-   - Already exists on Attack tab — enhance with historical frequency weighting
-   - Add prediction to Dashboard sidebar panel with countdown "next predicted in X seconds"
-   - Detect page: show recommended prevention action based on predicted next attack
-
-10. **Report Generation (Enhanced)**
-    - Already exists — add Dynamic Risk Score column to PDF/CSV
-    - Add Executive Summary section to PDF with total risk level, top threat, recommended actions
-    - Add "Ensemble Model Metrics" section in PDF
-
-11. **Behavioral Analysis** — new panel on Dashboard
-    - Per-IP request frequency tracker (simulated burst patterns)
-    - Anomaly flag: IPs exceeding 5 requests/minute get BEHAVIORAL ANOMALY tag
-    - Session pattern analysis: shows normal vs. anomalous session graphs
-    - Separate from existing ML Anomaly Detection — focused on behavioral patterns
-
-12. **UI Enhancements**
-    - Add visual indicator bar at top of dashboard: SAFE / WARNING / CRITICAL state (green/yellow/red glow)
-    - Add mini sparkline charts on stat cards
-    - Improve color coding: critical = red glow, high = orange, medium = yellow, low = green throughout
-    - Add animated scan line to Detect page header
+- **Zoom camera animation**: When a node is clicked, smoothly animate the Three.js camera to orbit/zoom to that lat/lon at a closer distance (~1.8 units), rotating the globe so the point faces the camera center
+- **easeInOut interpolation**: Use a lerp with easeInOut curve over ~1.5s using requestAnimationFrame (via useFrame)
+- **Selected node highlight**: A persistent large pulsing ring/glow on the currently selected attack node (distinct from the "recent" pulse used on latest 5 events)
+- **Details side panel**: Replace the current bottom overlay with a side panel (right column, above event feed) that shows full attack details when zoomed in — IP, city/country, attack type, timestamp, severity, block button, coordinates
+- **Reset View button**: Prominent "← BACK TO GLOBAL" button in the globe area when zoomed, that animates camera back to default position [0, 0, 2.8]
+- **Mini-map indicator**: Small overlay in bottom-right of globe showing a flat mini globe with a dot indicating the zoomed region
+- **Multi-click support**: Clicking a different node while already zoomed smoothly transitions camera to the new target
 
 ### Modify
-
-- `DetectPage.tsx`: Add XAI panel, Ensemble model panel, FP/FN marking buttons, Risk Score badge, Obfuscation pipeline display, Adaptive IP block counter to existing modal
-- `DashboardPage.tsx`: Add Behavioral Analysis panel, Risk Score gauge, enhanced ML panel with ensemble + XAI feature importance, top prediction countdown
-- `WafPage.tsx`: Add adaptive block logic (TEMP/PERM badges, countdown timers), Honeypot panel/tab, attack count per IP
-- `LiveAttackMapPage.tsx`: Add heatmap overlay, connection arcs, top cities sidebar, attack count bubbles
-- `ReportsPage.tsx`: Add risk score column, executive summary section to PDF
-- `App.tsx`: Add ipAttackCounts state, retrainingQueue state, honeypotLogs state, adaptive block logic
-- `types.ts`: Add RetrainingCase, HoneypotLog, IpStats, RiskLevel types
-- `data.ts`: Add obfuscated attack variants, honeypot scenarios
+- `GlobeScene`: Accept `selectedEvent` prop and `cameraTarget` prop; pass selected event id down to AttackNode for highlight rendering
+- `AttackNode`: Accept `isSelected` boolean prop; render a larger, persistent pulsing ring when selected
+- Main page: Replace bottom overlay panel logic with side panel (inject into right sidebar column above event feed)
+- `OrbitControls`: Disable when camera animation is active; re-enable after animation settles
+- `isAutoRotating`: Force to false when a node is selected/zoomed
 
 ### Remove
-
-- Nothing removed. All existing features preserved.
+- Bottom overlay `selectedEvent` panel (replaced by right-side details panel in the sidebar)
 
 ## Implementation Plan
-
-1. Update `types.ts` — add RetrainingCase, HoneypotLog, IpStats, RiskLevel, EnsembleScore types
-2. Update `data.ts` — add obfuscated payloads to scenarios, honeypot data
-3. Update `App.tsx` — add ipAttackCounts (Map<string,number>), retrainingQueue, honeypotLogs, adaptive block logic (3→temp, 10→perm), risk score calculation helper
-4. Update `DetectPage.tsx` — XAI panel with keyword highlighting + obfuscation pipeline, Ensemble model panel, FP/FN marking, Risk Score badge, adaptive block status
-5. Update `DashboardPage.tsx` — Risk Score gauge widget, Behavioral Analysis panel, enhanced ML section with ensemble + XAI feature importance chart, prediction countdown
-6. Update `WafPage.tsx` — adaptive block badges (TEMP/PERM/WATCHING) with countdown, Honeypot panel with deploy toggle and activity log
-7. Update `LiveAttackMapPage.tsx` — heatmap glow intensity by count, top cities sidebar, attack arcs, count bubbles on globe
-8. Update `ReportsPage.tsx` — add risk score column, executive summary to PDF output
-9. New component `EnsemblePanel.tsx` — reusable ensemble score + metrics display
-10. New component `XAIPanel.tsx` — reusable explainability panel with keyword highlighting
+1. Add `cameraTarget` state: `{ lat, lon, zoom: boolean } | null` to main page
+2. Add `cameraAnimRef` ref tracking animation progress (start position, end position, t=0→1)
+3. Create `CameraAnimator` component using `useFrame` that:
+   - Reads current camera position and target
+   - On each frame interpolates toward target using easeInOut
+   - Converts lat/lon to a camera position vector (distance 1.9 from origin, pointing at that point)
+   - Temporarily disables OrbitControls during animation (use ref to controls)
+   - Fires `onAnimationComplete` callback when t >= 1
+4. Modify `AttackNode` to accept and render `isSelected` highlight (bright ring + glow halo, not fading)
+5. Replace bottom overlay with a collapsible details panel injected at top of the right sidebar
+6. Add "← BACK TO GLOBAL" button overlay on globe canvas (bottom-left, above controls hint)
+7. Add mini-map: small `<Canvas>` or SVG overlay (bottom-right of globe) showing a 2D projection circle with a dot at the zoomed lat/lon
+8. All animations use requestAnimationFrame via R3F useFrame — no setInterval or setTimeout

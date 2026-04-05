@@ -367,6 +367,9 @@ export default function App() {
         attackType: "Credential Stuffing",
         source: "manual",
         websiteName,
+        lat: 19.076,
+        lon: 72.877,
+        country: "India",
       });
       addActivity(
         `Web attack: Credential stuffing on ${websiteName}`,
@@ -421,6 +424,9 @@ export default function App() {
         attackerIp: meta.hackerIp ?? "192.168.1.1",
         attackType: meta.attackType ?? scenarioName,
         source: "replay",
+        lat: 20.5937,
+        lon: 78.9629,
+        country: "India",
       });
       if (user?.role === "admin") {
         setAttackPopup({
@@ -478,7 +484,7 @@ export default function App() {
     const autoAttack = generateAutoAttack();
     setAttackPopup(autoAttack);
     addActivity(
-      `Manual alert: ${autoAttack.name} from ${autoAttack.city}, India (${autoAttack.attackerIp})`,
+      `Manual alert: ${autoAttack.name} from ${autoAttack.city}, ${autoAttack.country} (${autoAttack.attackerIp})`,
       "SYSTEM",
     );
     addAttackEvent({
@@ -488,6 +494,9 @@ export default function App() {
       attackerIp: autoAttack.attackerIp,
       attackType: autoAttack.name,
       source: "manual",
+      lat: autoAttack.lat,
+      lon: autoAttack.lon,
+      country: autoAttack.country,
     });
   }, [addActivity, addAttackEvent]);
 
@@ -500,7 +509,7 @@ export default function App() {
       const autoAttack = generateAutoAttack();
       setAttackPopup(autoAttack);
       addActivity(
-        `Auto-alert: ${autoAttack.name} from ${autoAttack.city}, India (${autoAttack.attackerIp})`,
+        `Auto-alert: ${autoAttack.name} from ${autoAttack.city}, ${autoAttack.country} (${autoAttack.attackerIp})`,
         "SYSTEM",
       );
       addAttackEvent({
@@ -510,6 +519,9 @@ export default function App() {
         attackerIp: autoAttack.attackerIp,
         attackType: autoAttack.name,
         source: "auto",
+        lat: autoAttack.lat,
+        lon: autoAttack.lon,
+        country: autoAttack.country,
       });
     }, 90000);
     return () => clearInterval(interval);
