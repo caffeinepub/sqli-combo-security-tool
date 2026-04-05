@@ -10,7 +10,14 @@ export type Page =
   | "timeline"
   | "map"
   | "waf"
-  | "web-targets";
+  | "web-targets"
+  | "siem"
+  | "threat-intel"
+  | "attack-chain"
+  | "compliance"
+  | "zero-trust"
+  | "api-security"
+  | "red-blue";
 
 export type Role =
   | "admin"
@@ -147,4 +154,78 @@ export interface EnsembleScore {
   xgboost: number;
   svm: number;
   ensemble: number;
+}
+
+// ── SOC Module Types ─────────────────────────────────────────────────────────
+
+export interface SiemEvent {
+  id: string;
+  alertId: string;
+  eventId: string;
+  severity: Severity;
+  status: "ingested" | "correlated" | "incident" | "closed";
+  attackType: string;
+  sourceIp: string;
+  correlatedCount: number;
+  timestamp: string;
+  pipeline: ("alert" | "ingestion" | "correlation" | "incident")[];
+  currentStep: number;
+}
+
+export interface ThreatIntelEntry {
+  id: string;
+  ip?: string;
+  domain?: string;
+  reputation: "high" | "medium" | "low";
+  category: string;
+  country: string;
+  lastSeen: string;
+  attackCount: number;
+  tags: string[];
+}
+
+export interface ZeroTrustRequest {
+  id: string;
+  timestamp: string;
+  ip: string;
+  path: string;
+  method: string;
+  result: "granted" | "denied";
+  reason?: string;
+  token?: string;
+  riskScore: number;
+}
+
+export interface ApiAttackLog {
+  id: string;
+  timestamp: string;
+  endpoint: string;
+  method: string;
+  payload: string;
+  attackType:
+    | "json-injection"
+    | "token-tampering"
+    | "suspicious-payload"
+    | "clean";
+  mlScore: number;
+  maliciousFields: string[];
+  blocked: boolean;
+}
+
+export interface AutoResponse {
+  id: string;
+  timestamp: string;
+  attackType: string;
+  trigger: string;
+  action: string;
+  status: "triggered" | "executed" | "failed";
+}
+
+export interface SlaMetric {
+  id: string;
+  attackId: string;
+  attackType: string;
+  detectionTime: number;
+  responseTime: number;
+  timestamp: string;
 }

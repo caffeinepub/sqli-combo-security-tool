@@ -1,4 +1,4 @@
-import { Ban, Shield, Zap } from "lucide-react";
+import { Ban, Send, Shield, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
   Alert,
@@ -19,6 +19,12 @@ interface DetectPageProps {
   onMarkFalseLabel?: (alertId: string, label: "FP" | "FN") => void;
   ipAttackCounts?: Record<string, IpStats>;
   modelVersion?: string;
+  onForwardToSiem?: (alert: Alert) => void;
+  threatIntelDb?: {
+    ip?: string;
+    domain?: string;
+    reputation: "high" | "medium" | "low";
+  }[];
 }
 
 type FilterTab = "all" | AlertStatus;
@@ -695,6 +701,8 @@ function AlertDetailModal({
   onMarkFalseLabel,
   ipAttackCounts = {},
   modelVersion,
+  onForwardToSiem,
+  threatIntelDb = [],
 }: {
   alert: Alert;
   action: AlertStatus;
@@ -706,6 +714,12 @@ function AlertDetailModal({
   onMarkFalseLabel?: (alertId: string, label: "FP" | "FN") => void;
   ipAttackCounts?: Record<string, IpStats>;
   modelVersion?: string;
+  onForwardToSiem?: (alert: Alert) => void;
+  threatIntelDb?: {
+    ip?: string;
+    domain?: string;
+    reputation: "high" | "medium" | "low";
+  }[];
 }) {
   const [justBlocked, setJustBlocked] = useState(false);
 
@@ -725,6 +739,19 @@ function AlertDetailModal({
 
   const isAlreadyBlocked =
     alert.hackerIp != null && blockedIps.some((b) => b.ip === alert.hackerIp);
+
+  const [siemForwarded, setSiemForwarded] = useState(false);
+
+  const handleForwardSiem = () => {
+    if (!onForwardToSiem) return;
+    onForwardToSiem(alert);
+    setSiemForwarded(true);
+  };
+
+  // Check if attacker IP is in threat intel database
+  const threatIntelMatch = alert.hackerIp
+    ? threatIntelDb.find((t) => t.ip === alert.hackerIp)
+    : null;
 
   const handleBlockIp = () => {
     if (!alert.hackerIp || !onBlockIp) return;
@@ -825,6 +852,23 @@ function AlertDetailModal({
                 <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
                   Geolocation: Eastern Europe / TOR exit node suspected
                 </p>
+                {threatIntelMatch && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    <span
+                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                        threatIntelMatch.reputation === "high"
+                          ? "text-red-400 border-red-500/40 bg-red-400/10"
+                          : threatIntelMatch.reputation === "medium"
+                            ? "text-orange-400 border-orange-500/40 bg-orange-400/10"
+                            : "text-yellow-400 border-yellow-500/40 bg-yellow-400/10"
+                      }`}
+                    >
+                      THREAT INTEL: {threatIntelMatch.reputation.toUpperCase()}{" "}
+                      RISK
+                    </span>
+                  </div>
+                )}
                 {alert.hackerIp && ipAttackCounts[alert.hackerIp] && (
                   <p className="text-[9px] font-mono text-orange-400/70 mt-0.5">
                     Hit count: {ipAttackCounts[alert.hackerIp].count} attacks
@@ -903,23 +947,39 @@ function AlertDetailModal({
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border bg-[#0d140d]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 rounded text-[11px] font-mono border border-border text-muted-foreground hover:text-foreground transition-colors"
-          >
-            CLOSE
-          </button>
-          {alert.status !== action && (
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border bg-[#0d140d]">
+          <div className="flex items-center gap-2">
+            {onForwardToSiem && (
+              <button
+                type="button"
+                data-ocid="detect.forward_siem.button"
+                onClick={handleForwardSiem}
+                disabled={siemForwarded}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-mono border border-blue-400/40 text-blue-400 hover:bg-blue-400/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={10} />
+                {siemForwarded ? "FORWARDED TO SIEM ✓" : "FORWARD TO SIEM"}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleConfirm}
-              className={`px-4 py-1.5 rounded text-[11px] font-mono border transition-colors ${actionColor}`}
+              onClick={onClose}
+              className="px-3 py-1.5 rounded text-[11px] font-mono border border-border text-muted-foreground hover:text-foreground transition-colors"
             >
-              SET {actionLabel}
+              CLOSE
             </button>
-          )}
+            {alert.status !== action && (
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className={`px-4 py-1.5 rounded text-[11px] font-mono border transition-colors ${actionColor}`}
+              >
+                SET {actionLabel}
+              </button>
+            )}
+          </div>
         </div>
       </dialog>
     </button>
@@ -936,6 +996,8 @@ export default function DetectPage({
   onMarkFalseLabel,
   ipAttackCounts = {},
   modelVersion,
+  onForwardToSiem,
+  threatIntelDb = [],
 }: DetectPageProps) {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [modal, setModal] = useState<{
@@ -1118,6 +1180,8 @@ export default function DetectPage({
           onMarkFalseLabel={onMarkFalseLabel}
           ipAttackCounts={ipAttackCounts}
           modelVersion={modelVersion}
+          onForwardToSiem={onForwardToSiem}
+          threatIntelDb={threatIntelDb}
         />
       )}
     </div>

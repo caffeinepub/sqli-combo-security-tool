@@ -232,6 +232,12 @@ function GlobeFallback() {
 
 function GlobeMesh({ isAutoRotating }: { isAutoRotating: boolean }) {
   const globeRef = useRef<THREE.Mesh>(null);
+  const { gl } = useThree();
+
+  // ── Apply device pixel ratio for crisp retina rendering ──────────────────
+  useEffect(() => {
+    gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  }, [gl]);
 
   // Load real Earth textures
   const colorMap = useLoader(
@@ -251,6 +257,22 @@ function GlobeMesh({ isAutoRotating }: { isAutoRotating: boolean }) {
     "/assets/generated/earth-specular-map.dim_2048x1024.jpg",
   );
 
+  // ── Apply high-quality filtering to all textures ──────────────────────────
+  useEffect(() => {
+    const maxAniso = gl.capabilities.getMaxAnisotropy();
+    for (const tex of [colorMap, nightMap, bumpMap, specularMap]) {
+      if (!tex) continue;
+      const t = tex as THREE.Texture;
+      // Trilinear filtering — sharpest result during zoom
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      // Anisotropic filtering — prevents blurring at oblique angles
+      t.anisotropy = maxAniso;
+      t.generateMipmaps = true;
+      t.needsUpdate = true;
+    }
+  }, [gl, colorMap, nightMap, bumpMap, specularMap]);
+
   useEffect(() => {
     if (globeRef.current) {
       const mat = globeRef.current.material as THREE.MeshPhongMaterial;
@@ -266,8 +288,9 @@ function GlobeMesh({ isAutoRotating }: { isAutoRotating: boolean }) {
   });
 
   return (
+    // 128×128 segments — keeps geometry smooth at close zoom distances
     <mesh ref={globeRef}>
-      <sphereGeometry args={[1, 64, 64]} />
+      <sphereGeometry args={[1, 128, 128]} />
       <meshPhongMaterial
         map={colorMap as THREE.Texture}
         bumpMap={bumpMap as THREE.Texture}
@@ -928,7 +951,7 @@ function GlobeScene({
         ref={controlsRef}
         enableZoom
         enablePan={false}
-        minDistance={1.4}
+        minDistance={1.6}
         maxDistance={5}
         autoRotate={false}
         rotateSpeed={0.6}
@@ -1382,7 +1405,8 @@ export default function LiveAttackMapPage({
           <Canvas
             camera={{ position: [0, 0, 2.8], fov: 45 }}
             style={{ width: "100%", height: "100%", background: "#000508" }}
-            gl={{ antialias: true }}
+            gl={{ antialias: true, powerPreference: "high-performance" }}
+            dpr={[1, Math.min(window.devicePixelRatio, 2)]}
             onPointerDown={() => setIsAutoRotating(false)}
           >
             <Suspense fallback={null}>

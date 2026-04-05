@@ -14,26 +14,35 @@ import {
   generateInitialThreatTrend,
   getScenarioMeta,
 } from "./data";
+import APISecurityPage from "./pages/APISecurityPage";
 import ActivityPage from "./pages/ActivityPage";
+import AttackChainPage from "./pages/AttackChainPage";
 import AttackPage from "./pages/AttackPage";
 import AttackTimelinePage from "./pages/AttackTimelinePage";
+import CompliancePage from "./pages/CompliancePage";
 import DashboardPage from "./pages/DashboardPage";
 import DetectPage from "./pages/DetectPage";
 import LiveAttackMapPage from "./pages/LiveAttackMapPage";
 import LoginPage from "./pages/LoginPage";
 import PreventPage from "./pages/PreventPage";
+import RedBluePage from "./pages/RedBluePage";
 import ReportsPage from "./pages/ReportsPage";
+import SIEMPage from "./pages/SIEMPage";
 import ScanPage from "./pages/ScanPage";
 import SecurityLogoPage from "./pages/SecurityLogoPage";
 import SqliGuardLogoPage from "./pages/SqliGuardLogoPage";
+import ThreatIntelPage from "./pages/ThreatIntelPage";
 import UsersPage from "./pages/UsersPage";
 import WafPage from "./pages/WafPage";
 import WebTargetDashboard from "./pages/WebTargetDashboard";
+import ZeroTrustPage from "./pages/ZeroTrustPage";
+import { INITIAL_THREAT_INTEL } from "./threatIntelData";
 import type {
   ActivityEntry,
   Alert,
   AlertStatus,
   AttackEvent,
+  AutoResponse,
   BlockedIp,
   HoneypotLog,
   IpStats,
@@ -41,6 +50,9 @@ import type {
   PreventionTask,
   RetrainingCase,
   ScannerEvent,
+  SiemEvent,
+  SlaMetric,
+  ThreatIntelEntry,
   ThreatPoint,
   User,
 } from "./types";
@@ -78,7 +90,7 @@ export default function App() {
   const [attackEvents, setAttackEvents] = useState<AttackEvent[]>([]);
   const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
 
-  // ── New AI/ML state ──
+  // ── Existing AI/ML state ──
   const [retrainingQueue, setRetrainingQueue] = useState<RetrainingCase[]>([]);
   const [honeypotLogs, setHoneypotLogs] = useState<HoneypotLog[]>(
     INITIAL_HONEYPOT_LOGS,
@@ -88,6 +100,14 @@ export default function App() {
   );
   const [modelVersion, setModelVersion] = useState("v1.0.0");
   const [isRetraining, setIsRetraining] = useState(false);
+
+  // ── New SOC state ──
+  const [siemEvents, setSiemEvents] = useState<SiemEvent[]>([]);
+  const [threatIntelDb] = useState<ThreatIntelEntry[]>(INITIAL_THREAT_INTEL);
+  const [autoResponses, setAutoResponses] = useState<AutoResponse[]>([]);
+  const [slaMetrics, setSlaMetrics] = useState<SlaMetric[]>([]);
+  const [redBlueMode, setRedBlueMode] = useState<"red" | "blue">("blue");
+  const [redBlueScore, setRedBlueScore] = useState({ attacks: 0, defenses: 0 });
 
   const incrementIpCount = useCallback((ip: string) => {
     setIpAttackCounts((prev) => {
@@ -246,6 +266,53 @@ export default function App() {
     );
     toast.success(`Honeypot triggered: ${newLog.ip}`, { duration: 3000 });
   }, [incrementIpCount, addActivity]);
+
+  // ── Forward to SIEM ──
+  const handleForwardToSiem = useCallback(
+    (alert: Alert) => {
+      const ev: SiemEvent = {
+        id: `siem-${Date.now()}`,
+        alertId: alert.id,
+        eventId: `EVT-${Math.floor(Math.random() * 90000 + 10000)}`,
+        severity: alert.severity,
+        status: "ingested",
+        attackType: alert.attackType ?? alert.scenarioName,
+        sourceIp: alert.hackerIp ?? "unknown",
+        correlatedCount: Math.floor(Math.random() * 5 + 1),
+        timestamp: new Date().toISOString(),
+        pipeline: ["alert", "ingestion", "correlation", "incident"],
+        currentStep: 0,
+      };
+      setSiemEvents((prev) => [ev, ...prev]);
+      // advance pipeline automatically
+      setTimeout(
+        () =>
+          setSiemEvents((prev) =>
+            prev.map((e) =>
+              e.id === ev.id
+                ? { ...e, status: "correlated", currentStep: 2 }
+                : e,
+            ),
+          ),
+        2000,
+      );
+      setTimeout(
+        () =>
+          setSiemEvents((prev) =>
+            prev.map((e) =>
+              e.id === ev.id ? { ...e, status: "incident", currentStep: 3 } : e,
+            ),
+          ),
+        4000,
+      );
+      addActivity(
+        `Alert ${alert.id} forwarded to SIEM`,
+        user?.email ?? "system",
+      );
+      toast.success(`Forwarded to SIEM: ${ev.eventId}`, { duration: 3000 });
+    },
+    [addActivity, user],
+  );
 
   const handleLogin = useCallback(
     (email: string, password: string): boolean => {
@@ -438,8 +505,60 @@ export default function App() {
         });
       }
       toast.error(`Attack replay: ${scenarioName}`, { duration: 3000 });
+
+      // ── Auto-response ──
+      const responseActions: Record<string, string> = {
+        "SQL Injection": "Block IP",
+        SQLi: "Block IP",
+        "Brute Force": "Rate Limit",
+        XSS: "Sanitize Input",
+        "Cross-Site Scripting": "Sanitize Input",
+        CSRF: "Invalidate Token",
+        "Command Injection": "Block IP",
+      };
+      const actionEntry = Object.entries(responseActions).find(([k]) =>
+        scenarioName.toLowerCase().includes(k.toLowerCase()),
+      );
+      if (actionEntry) {
+        const ar: AutoResponse = {
+          id: `ar-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          attackType: scenarioName,
+          trigger: `${scenarioName} detected`,
+          action: actionEntry[1],
+          status: "triggered",
+        };
+        setAutoResponses((prev) => [ar, ...prev.slice(0, 19)]);
+        setTimeout(
+          () =>
+            setAutoResponses((prev) =>
+              prev.map((r) =>
+                r.id === ar.id ? { ...r, status: "executed" } : r,
+              ),
+            ),
+          1500,
+        );
+      }
+
+      // ── SLA metric ──
+      const sla: SlaMetric = {
+        id: `sla-${Date.now()}`,
+        attackId: `ae-${Date.now()}`,
+        attackType: scenarioName,
+        detectionTime: Math.floor(Math.random() * 800 + 200),
+        responseTime: Math.floor(Math.random() * 2000 + 500),
+        timestamp: new Date().toISOString(),
+      };
+      setSlaMetrics((prev) => [sla, ...prev.slice(0, 49)]);
+
+      // ── Red/Blue score ──
+      if (redBlueMode === "red") {
+        setRedBlueScore((prev) => ({ ...prev, attacks: prev.attacks + 1 }));
+      } else {
+        setRedBlueScore((prev) => ({ ...prev, defenses: prev.defenses + 1 }));
+      }
     },
-    [user, addActivity, addAttackEvent],
+    [user, addActivity, addAttackEvent, redBlueMode],
   );
 
   const handleUpdateAlertStatus = useCallback(
@@ -631,6 +750,8 @@ export default function App() {
             modelVersion={modelVersion}
             ipAttackCounts={ipAttackCounts}
             isRetraining={isRetraining}
+            autoResponses={autoResponses}
+            slaMetrics={slaMetrics}
           />
         );
       case "users":
@@ -656,6 +777,8 @@ export default function App() {
             onMarkFalseLabel={handleMarkFalseLabel}
             ipAttackCounts={ipAttackCounts}
             modelVersion={modelVersion}
+            onForwardToSiem={handleForwardToSiem}
+            threatIntelDb={threatIntelDb}
           />
         );
       case "prevent":
@@ -696,6 +819,35 @@ export default function App() {
             onBlockIp={handleBlockIp}
             currentUser={user}
             ipAttackCounts={ipAttackCounts}
+          />
+        );
+      // ── SOC Module pages ──
+      case "siem":
+        return <SIEMPage siemEvents={siemEvents} />;
+      case "threat-intel":
+        return (
+          <ThreatIntelPage
+            threatIntelDb={threatIntelDb}
+            attackEvents={attackEvents}
+            ipAttackCounts={ipAttackCounts}
+          />
+        );
+      case "attack-chain":
+        return <AttackChainPage attackEvents={attackEvents} />;
+      case "compliance":
+        return <CompliancePage attackEvents={attackEvents} />;
+      case "zero-trust":
+        return <ZeroTrustPage />;
+      case "api-security":
+        return <APISecurityPage />;
+      case "red-blue":
+        return (
+          <RedBluePage
+            mode={redBlueMode}
+            onSetMode={setRedBlueMode}
+            score={redBlueScore}
+            attackEvents={attackEvents}
+            onRunAttack={handleTriggerManualAttack}
           />
         );
       default:

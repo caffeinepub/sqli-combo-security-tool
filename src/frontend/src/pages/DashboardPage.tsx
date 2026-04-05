@@ -23,9 +23,11 @@ import {
 } from "recharts";
 import type {
   AttackEvent,
+  AutoResponse,
   IpStats,
   RetrainingCase,
   ScannerEvent,
+  SlaMetric,
   ThreatPoint,
 } from "../types";
 
@@ -43,6 +45,8 @@ interface DashboardPageProps {
   modelVersion?: string;
   ipAttackCounts?: Record<string, IpStats>;
   isRetraining?: boolean;
+  autoResponses?: AutoResponse[];
+  slaMetrics?: SlaMetric[];
 }
 
 function StatCard({
@@ -1423,6 +1427,279 @@ function RecentAttackDetailsPanel({
   );
 }
 
+// ── Multi-System Monitoring Panel ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+function MultiSystemMonitoringPanel({
+  attackEvents,
+}: { attackEvents?: AttackEvent[] }) {
+  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+  const recentEvents = (attackEvents ?? []).filter(
+    (e) => new Date(e.timestamp).getTime() > fiveMinAgo,
+  );
+
+  const getStatus = (types: string[]) => {
+    const hits = recentEvents.filter((e) =>
+      types.some(
+        (t) =>
+          e.attackType?.toLowerCase().includes(t.toLowerCase()) ||
+          e.name?.toLowerCase().includes(t.toLowerCase()),
+      ),
+    ).length;
+    if (hits >= 3) return "CRITICAL";
+    if (hits >= 1) return "UNDER ATTACK";
+    return "SAFE";
+  };
+
+  const systems = [
+    {
+      name: "WEB APPLICATION",
+      icon: "🌐",
+      types: ["XSS", "SQLi", "CSRF", "Script", "Injection"],
+      metrics: { requests: 1247, errors: 3, uptime: "99.8%" },
+    },
+    {
+      name: "API GATEWAY",
+      icon: "⚡",
+      types: ["API", "JSON", "Token", "Brute"],
+      metrics: { requests: 8934, errors: 12, uptime: "99.9%" },
+    },
+    {
+      name: "DATABASE",
+      icon: "🗄️",
+      types: ["SQL", "Command", "Traversal"],
+      metrics: { requests: 4521, errors: 0, uptime: "100%" },
+    },
+  ];
+
+  return (
+    <div className="bg-card border border-border rounded p-4">
+      <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
+        MULTI-SYSTEM MONITORING
+      </p>
+      <div className="grid grid-cols-3 gap-3">
+        {systems.map((sys) => {
+          const status = getStatus(sys.types);
+          const borderCls =
+            status === "CRITICAL"
+              ? "border-red-500/50 bg-red-500/5"
+              : status === "UNDER ATTACK"
+                ? "border-orange-500/50 bg-orange-500/5"
+                : "border-green-500/30 bg-green-500/5";
+          const textCls =
+            status === "CRITICAL"
+              ? "text-red-400"
+              : status === "UNDER ATTACK"
+                ? "text-orange-400"
+                : "text-green-400";
+          const dotCls =
+            status === "CRITICAL"
+              ? "bg-red-400 animate-ping"
+              : status === "UNDER ATTACK"
+                ? "bg-orange-400 animate-pulse"
+                : "bg-green-400";
+          return (
+            <div
+              key={sys.name}
+              className={`border rounded p-3 transition-all ${borderCls}`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg">{sys.icon}</span>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+                  <span className={`text-[9px] font-mono font-bold ${textCls}`}>
+                    {status}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] font-mono font-bold text-foreground mb-2">
+                {sys.name}
+              </p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                <span className="text-[9px] font-mono text-muted-foreground">
+                  Req/min
+                </span>
+                <span className="text-[9px] font-mono text-foreground">
+                  {sys.metrics.requests.toLocaleString()}
+                </span>
+                <span className="text-[9px] font-mono text-muted-foreground">
+                  Errors
+                </span>
+                <span
+                  className={`text-[9px] font-mono font-bold ${sys.metrics.errors > 0 ? "text-red-400" : "text-green-400"}`}
+                >
+                  {sys.metrics.errors}
+                </span>
+                <span className="text-[9px] font-mono text-muted-foreground">
+                  Uptime
+                </span>
+                <span className="text-[9px] font-mono text-green-400">
+                  {sys.metrics.uptime}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── AI Auto-Response Panel ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+function AIAutoResponsePanel({
+  autoResponses,
+}: { autoResponses: AutoResponse[] }) {
+  if (autoResponses.length === 0) return null;
+
+  return (
+    <div className="bg-card border border-border rounded p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          AI AUTO-RESPONSE ACTIONS
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        {autoResponses.slice(0, 10).map((ar, idx) => (
+          <div
+            key={ar.id}
+            data-ocid={`dashboard.auto_response.item.${idx + 1}`}
+            className="flex items-center gap-3 px-3 py-2 rounded bg-secondary/20 border border-border/50 text-[10px] font-mono"
+          >
+            <span className="text-muted-foreground/50 w-20 shrink-0">
+              {new Date(ar.timestamp).toLocaleTimeString()}
+            </span>
+            <span className="text-foreground truncate flex-1">
+              {ar.trigger}
+            </span>
+            <span className="text-[9px] font-mono text-cyber-cyan border border-cyber-cyan/30 rounded px-1.5 py-0.5 shrink-0">
+              → {ar.action}
+            </span>
+            <span
+              className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                ar.status === "executed"
+                  ? "text-green-400 border-green-500/40 bg-green-400/10"
+                  : ar.status === "triggered"
+                    ? "text-yellow-400 border-yellow-500/40 bg-yellow-400/10 animate-pulse"
+                    : "text-red-400 border-red-500/40 bg-red-400/10"
+              }`}
+            >
+              {ar.status.toUpperCase()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── SLA Performance Panel ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+function SLAPanel({ slaMetrics }: { slaMetrics: SlaMetric[] }) {
+  if (slaMetrics.length === 0) return null;
+
+  const avgDetection =
+    slaMetrics.length > 0
+      ? Math.round(
+          slaMetrics.reduce((a, b) => a + b.detectionTime, 0) /
+            slaMetrics.length,
+        )
+      : 0;
+  const avgResponse =
+    slaMetrics.length > 0
+      ? Math.round(
+          slaMetrics.reduce((a, b) => a + b.responseTime, 0) /
+            slaMetrics.length,
+        )
+      : 0;
+
+  return (
+    <div className="bg-card border border-border rounded p-4">
+      <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
+        SLA PERFORMANCE METRICS
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              {[
+                "ATTACK TYPE",
+                "DETECTION (ms)",
+                "RESPONSE (ms)",
+                "TIMESTAMP",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-2 text-left text-[9px] font-mono uppercase tracking-widest text-muted-foreground"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {slaMetrics.slice(0, 10).map((m, idx) => (
+              <tr
+                key={m.id}
+                data-ocid={`dashboard.sla.item.${idx + 1}`}
+                className="border-b border-border/30 hover:bg-secondary/10"
+              >
+                <td className="px-3 py-2 text-[10px] font-mono text-foreground">
+                  {m.attackType}
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`text-[10px] font-mono font-bold ${
+                      m.detectionTime < 500
+                        ? "text-green-400"
+                        : m.detectionTime < 1000
+                          ? "text-yellow-400"
+                          : "text-red-400"
+                    }`}
+                  >
+                    {m.detectionTime}ms
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`text-[10px] font-mono font-bold ${
+                      m.responseTime < 1000
+                        ? "text-green-400"
+                        : m.responseTime < 2000
+                          ? "text-yellow-400"
+                          : "text-red-400"
+                    }`}
+                  >
+                    {m.responseTime}ms
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-[9px] font-mono text-muted-foreground">
+                  {new Date(m.timestamp).toLocaleTimeString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-border bg-secondary/10">
+              <td className="px-3 py-2 text-[9px] font-mono font-bold text-muted-foreground">
+                AVERAGES
+              </td>
+              <td className="px-3 py-2">
+                <span className="text-[10px] font-mono font-bold text-cyber-cyan">
+                  {avgDetection}ms avg
+                </span>
+              </td>
+              <td className="px-3 py-2">
+                <span className="text-[10px] font-mono font-bold text-cyber-cyan">
+                  {avgResponse}ms avg
+                </span>
+              </td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage({
   threatLevel,
   openAlerts,
@@ -1437,6 +1714,8 @@ export default function DashboardPage({
   modelVersion = "v1.0.0",
   ipAttackCounts: _ipAttackCounts = {},
   isRetraining = false,
+  autoResponses = [],
+  slaMetrics = [],
 }: DashboardPageProps) {
   // Threat Status Bar
   const threatStatus =
@@ -1702,6 +1981,15 @@ export default function DashboardPage({
 
       {/* Recent Attack Details Panel */}
       <RecentAttackDetailsPanel attackEvents={attackEvents} />
+
+      {/* Multi-System Monitoring */}
+      <MultiSystemMonitoringPanel attackEvents={attackEvents} />
+
+      {/* AI Auto-Response Panel */}
+      <AIAutoResponsePanel autoResponses={autoResponses} />
+
+      {/* SLA Performance Panel */}
+      <SLAPanel slaMetrics={slaMetrics} />
     </div>
   );
 }
